@@ -4,6 +4,14 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.1.2 (2026-10-27)
+
+A shortcut to make an app password while adding an account.
+
+### New
+
+- **Make an app password.** When you add a Gmail, Yahoo or iCloud address, a **Make an app password** button appears under the password field. It opens that provider's app-password page in your browser, so you can make one and paste it straight back into MailCtrl. MailCtrl itself never visits the page; it only opens when you tap the button.
+
 ## v0.1.1 (2026-10-27)
 
 Clearer sign-in errors, and Gmail app passwords work however you paste them.

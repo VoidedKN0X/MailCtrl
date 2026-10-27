@@ -122,6 +122,18 @@ object Presets {
 
     private val spacedAppPasswords = setOf("gmail.com", "googlemail.com")
 
+    /**
+     * Where to make an app password for this address, for the providers that need one. Only opened when you
+     * tap the button; MailCtrl itself never contacts these pages.
+     */
+    fun appPasswordUrl(email: String): String? = when (domainOf(email)) {
+        "gmail.com", "googlemail.com" -> "https://myaccount.google.com/apppasswords"
+        "yahoo.com", "yahoo.co.uk", "yahoo.fr", "yahoo.de", "ymail.com", "rocketmail.com" ->
+            "https://login.yahoo.com/account/security/app-passwords"
+        "icloud.com", "me.com", "mac.com" -> "https://account.apple.com/account/manage"
+        else -> null
+    }
+
     fun domainOf(email: String): String = email.substringAfterLast('@', "").trim().lowercase()
 
     /** Tutanota has no IMAP at all: it can't be added to any mail app. */

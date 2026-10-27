@@ -68,8 +68,8 @@ Settings, notifications and your accounts are behind the profile picture at the 
 
 Most big providers don't let mail apps in with your normal password once two-step sign-in is on. Make an **app password** in your account's security settings and use that in MailCtrl instead. MailCtrl only signs in with a password over IMAP and SMTP; there's no sign-in through a web page, so nothing from the provider's own sign-in system ends up in the app.
 
-- **Gmail:** turn on 2-Step Verification, then create an app password at myaccount.google.com › Security › App passwords. MailCtrl fills in the servers by itself.
-- **Yahoo, iCloud, Fastmail, GMX and others:** the same idea, under their own security settings.
+- **Gmail:** turn on 2-Step Verification, then create an app password at myaccount.google.com › Security › App passwords (the **Make an app password** button under the password field opens that page). MailCtrl fills in the servers by itself.
+- **Yahoo, iCloud, Fastmail, GMX and others:** the same idea, under their own security settings. For Yahoo and iCloud the button opens their page too.
 
 ### Proton Mail
 

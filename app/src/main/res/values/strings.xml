@@ -350,4 +350,5 @@
     <string name="error_app_password">This account needs an app password, not your normal password. Make one in your account\'s security settings (two-step sign-in has to be on), then paste it here.</string>
     <string name="error_web_login">The provider blocked this sign-in until you confirm it in a web browser. Sign in to your mail on the web, approve it, then try again.</string>
     <string name="server_said">The server said: %1$s</string>
+    <string name="setup_make_app_password">Make an app password</string>
 </resources>

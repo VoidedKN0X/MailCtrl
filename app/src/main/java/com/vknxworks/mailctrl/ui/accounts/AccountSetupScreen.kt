@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -74,6 +75,7 @@ import com.vknxworks.mailctrl.ui.components.SectionLabel
 import com.vknxworks.mailctrl.ui.components.SecureScreen
 import com.vknxworks.mailctrl.ui.components.ctrlFieldColors
 import com.vknxworks.mailctrl.ui.components.friendlyMessage
+import com.vknxworks.mailctrl.ui.components.openLink
 import com.vknxworks.mailctrl.ui.components.runTask
 import com.vknxworks.mailctrl.ui.nav.LocalNavigator
 import com.vknxworks.mailctrl.ui.theme.CtrlColors
@@ -253,6 +255,16 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Note(Icons.Outlined.Info, stringResource(if (proton) R.string.setup_proton_note else R.string.setup_app_password_note))
+            // Known providers that need an app password: a shortcut to the page where you make one.
+            val appPasswordUrl = if (proton) null else Presets.appPasswordUrl(email.trim())
+            if (appPasswordUrl != null) {
+                CtrlSecondaryButton(
+                    stringResource(R.string.setup_make_app_password),
+                    onClick = { openLink(context, appPasswordUrl) },
+                    icon = Icons.Outlined.Key,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Field(stringResource(R.string.setup_sender_name), senderName, { senderName = it })
 
             if (showServers) {
