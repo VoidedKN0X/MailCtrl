@@ -197,9 +197,10 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
         busy = true
         scope.launch {
             try {
-                val tested = c.mail.test(a, password)
+                val pw = Presets.cleanPassword(a.email, password)
+                val tested = c.mail.test(a, pw)
                 c.mail.close(tested.id)
-                c.accounts.put(tested, password)
+                c.accounts.put(tested, pw)
                 if (!editing) NotifyChecker.forget(context, tested.id)
                 c.runTask { c.actions.refreshFolders(tested.id) }
                 busy = false

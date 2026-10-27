@@ -4,6 +4,20 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.1.1 (2026-10-27)
+
+Clearer sign-in errors, and Gmail app passwords work however you paste them.
+
+### Fixed
+
+- **Gmail app passwords pasted with spaces.** The app password is shown in four groups ("abcd efgh ijkl mnop"); the spaces are now dropped when signing in, so it works pasted either way.
+
+### Changed
+
+- **Sign-in errors say what the server said.** When a server refuses the password, MailCtrl now shows its own explanation under the error, so you can see whether the password is wrong or something else is needed.
+- **"Needs an app password"** is shown when the server says your normal password can't be used here, with what to do: turn on two-step sign-in, make an app password and paste that instead.
+- **"Confirm in a web browser"** is shown when the provider blocked the sign-in until you approve it on the web.
+
 ## v0.1.0 (2026-10-27)
 
 The first release: an email app in the spirit of Thunderbird, talking straight to your own IMAP and SMTP servers, private and Google-free.

@@ -113,6 +113,15 @@ object Presets {
 
     private val protonDomains = setOf("proton.me", "protonmail.com", "protonmail.ch", "pm.me")
 
+    /**
+     * Some providers show app passwords in groups with spaces ("abcd efgh ijkl mnop"); they never contain
+     * spaces themselves, so pasted spaces are dropped for those providers.
+     */
+    fun cleanPassword(email: String, password: String): String =
+        if (domainOf(email) in spacedAppPasswords) password.filterNot { it.isWhitespace() } else password
+
+    private val spacedAppPasswords = setOf("gmail.com", "googlemail.com")
+
     fun domainOf(email: String): String = email.substringAfterLast('@', "").trim().lowercase()
 
     /** Tutanota has no IMAP at all: it can't be added to any mail app. */

@@ -157,7 +157,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         var cause: Throwable? = e
         while (cause != null) {
             when (cause) {
-                is AuthenticationFailedException -> return AuthException(str(R.string.error_auth), e)
+                is AuthenticationFailedException -> return authError(cause.message, e)
                 is UnknownHostException -> return MailException(str(R.string.error_unknown_host), e)
                 is SocketTimeoutException -> return MailException(str(R.string.error_timeout), e)
                 is ConnectException, is NoRouteToHostException -> return MailException(str(R.string.error_connect), e)
@@ -168,9 +168,24 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         val msg = e.message.orEmpty()
         return when {
             msg.contains("STARTTLS", ignoreCase = true) -> MailException(str(R.string.error_starttls), e)
-            msg.contains("[AUTHENTICATIONFAILED]", ignoreCase = true) || msg.contains("Invalid credentials", ignoreCase = true) ->
-                AuthException(str(R.string.error_auth), e)
+            msg.contains("[AUTHENTICATIONFAILED]", ignoreCase = true) || msg.contains("Invalid credentials", ignoreCase = true) ||
+                msg.contains("Application-specific password", ignoreCase = true) -> authError(msg, e)
             else -> MailException(msg.ifBlank { str(R.string.error_generic) }, e)
+        }
+    }
+
+    /**
+     * A refused sign-in, with what the server said about it: that often tells exactly what's wrong (an app
+     * password is needed, the account must allow mail apps first, the password is wrong).
+     */
+    private fun authError(serverText: String?, e: Throwable): AuthException {
+        val said = serverText.orEmpty().replace(Regex("\\s+"), " ").trim().take(300)
+        return when {
+            said.contains("Application-specific password", ignoreCase = true) -> AuthException(str(R.string.error_app_password), e)
+            said.contains("web browser", ignoreCase = true) || said.contains("WEBALERT", ignoreCase = true) ->
+                AuthException(str(R.string.error_web_login), e)
+            said.isBlank() -> AuthException(str(R.string.error_auth), e)
+            else -> AuthException(str(R.string.error_auth) + "\n\n" + str(R.string.server_said, said), e)
         }
     }
 
