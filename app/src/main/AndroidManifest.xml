@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Your own mail servers (IMAP and SMTP), and your own ntfy address for the test wake-up. Nothing else. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- App lock: fingerprint. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Background checks for new mail survive a restart (WorkManager). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- "Battery: unrestricted" button on the Notifications screen, so checks aren't delayed while the phone sleeps. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Only ntfy is looked up, to register for wake-ups (UnifiedPush). -->
+    <queries>
+        <package android:name="io.heckel.ntfy" />
+        <intent>
+            <action android:name="org.unifiedpush.android.distributor.REGISTER" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".MailCtrlApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MailCtrl">
+
+        <!-- The message viewer never looks links up online (Safe Browsing) and sends no usage data. -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- mailto: links from the browser and other apps. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SENDTO" />
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mailto" />
+            </intent-filter>
+            <!-- "Share to MailCtrl": text and files from any app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!-- "Mark as read" and "Delete" on notifications: only MailCtrl's own notifications send these. -->
+        <receiver
+            android:name=".notify.NotificationActionReceiver"
+            android:exported="false" />
+
+        <!-- Wake-ups from ntfy. Exported because ntfy is another app; every broadcast must carry the secret
+             token of MailCtrl's registration or it's ignored. -->
+        <receiver
+            android:name=".notify.PushReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
+                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+                <action android:name="org.unifiedpush.android.connector.TEMP_UNAVAILABLE" />
+            </intent-filter>
+        </receiver>
+        <!-- ntfy binds to this for a few seconds before a wake-up, so MailCtrl can check your mail at once. -->
+        <service
+            android:name=".notify.RaiseToForegroundService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.RAISE_TO_FOREGROUND" />
+            </intent-filter>
+        </service>
+
+        <!-- Hands one downloaded attachment at a time to the app you open or share it with. Never exported;
+             access is granted per file. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- WorkManager's diagnostics receiver isn't used; drop it so MailCtrl exposes nothing it doesn't need. -->
+        <receiver
+            android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
+            tools:node="remove" />
+
+        <!-- No downloadable emoji font: androidx.emoji2 would look one up from a font provider on start.
+             Emoji use the phone's own font. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                tools:node="remove" />
+        </provider>
+    </application>
+</manifest>

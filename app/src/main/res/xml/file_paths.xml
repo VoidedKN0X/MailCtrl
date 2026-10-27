@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Attachments downloaded to open, share or save; cleared when MailCtrl starts again. -->
+    <cache-path name="attachments" path="attachments/" />
+</paths>

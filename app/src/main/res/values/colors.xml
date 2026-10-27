@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ctrl / Signal Light. The dark versions are in values-night; the app follows the device's setting. -->
+<resources>
+    <color name="window_bg">#FFF5F5F1</color>
+    <color name="ic_bg">#FF08080A</color>
+    <!-- Notification accent: the darker ink, the pale fill is hard to read on a light shade. -->
+    <color name="notify_accent">#FF6A3BDB</color>
+
+</resources>

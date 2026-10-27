@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mail servers are reached with MailCtrl's own TLS checks (IMAP and SMTP don't go through this file's
+     rules); this covers the ntfy test post. Plain HTTP is allowed because ntfy and other self-hosted servers
+     often run on a home network or behind a VPN. User-installed CAs are trusted for servers behind a private CA. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_write"
+        android:shortcutId="write"
+        android:shortcutShortLabel="@string/write">
+        <intent
+            android:action="com.vknxworks.mailctrl.COMPOSE"
+            android:targetClass="com.vknxworks.mailctrl.MainActivity"
+            android:targetPackage="com.vknxworks.mailctrl" />
+    </shortcut>
+</shortcuts>
