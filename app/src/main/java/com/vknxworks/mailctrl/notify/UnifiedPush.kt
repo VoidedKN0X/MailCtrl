@@ -4,7 +4,6 @@ import android.app.BroadcastOptions
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.PowerManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -130,11 +129,7 @@ object UnifiedPush {
         val pi = PendingIntent.getBroadcast(context, 0, Intent("org.unifiedpush.dummy_app"), PendingIntent.FLAG_IMMUTABLE)
         intent.putExtra("pi", pi)
         runCatching {
-            if (Build.VERSION.SDK_INT >= 34) {
-                context.sendBroadcast(intent, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle())
-            } else {
-                context.sendBroadcast(intent)
-            }
+            context.sendBroadcast(intent, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle())
         }
     }
 }

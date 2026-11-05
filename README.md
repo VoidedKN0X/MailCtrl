@@ -2,7 +2,7 @@
 
 **Your email, private and Google-free.**
 
-[![Latest release](https://img.shields.io/github/v/release/VoidedKN0X/MailCtrl?label=download)](https://github.com/VoidedKN0X/MailCtrl/releases/latest) ![Android 13+](https://img.shields.io/badge/Android-13%2B-3DDC84?logo=android&logoColor=white) [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE) ![Telemetry-free](https://img.shields.io/badge/telemetry-none-brightgreen) [![Sponsor](https://img.shields.io/badge/sponsor-GitHub-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/VoidedKN0X)
+[![Latest release](https://img.shields.io/github/v/release/VoidedKN0X/MailCtrl?label=download)](https://github.com/VoidedKN0X/MailCtrl/releases/latest) ![Android 15+](https://img.shields.io/badge/Android-15%2B-3DDC84?logo=android&logoColor=white) [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE) ![Telemetry-free](https://img.shields.io/badge/telemetry-none-brightgreen) [![Sponsor](https://img.shields.io/badge/sponsor-GitHub-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/VoidedKN0X)
 
 MailCtrl is an email app for Android, in the spirit of Thunderbird: several accounts, folders, search and attachments, talking straight to your own mail servers over IMAP and SMTP. No MailCtrl server sits in between, nothing is tracked, and nothing comes from Google.
 
@@ -37,7 +37,7 @@ Coming soon.
 
 ## Requirements
 
-- Android 13 or newer, on a 64-bit ARM phone (nearly every phone from the last several years)
+- Android 15 or newer, on a 64-bit ARM phone (nearly every phone from the last several years)
 - A mail account with IMAP and SMTP access
 - **Google-free and de-Googled:** no Google Play services, Firebase or other Google services, and the app never contacts Google. It works the same on de-Googled phones (GrapheneOS, CalyxOS, /e/OS, LineageOS without Google apps).
 
@@ -147,7 +147,7 @@ Two more switches in the same section work with or without the app lock, and are
 
 The lock, PIN and sign-in screens are always kept out of screenshots and recordings, whatever these switches say.
 
-**Nothing can be drawn over the lock screen or PIN pad.** While the lock screen, a PIN screen or a confirmation (delete a message, discard a draft, empty a folder, remove an account, trust a certificate, **Forgot PIN?**) is showing, other apps' floating windows such as chat heads are hidden, so they can't cover a button to trick you into tapping it. On Android 14 and newer, apps that aren't real accessibility tools also can't read the lock and PIN screens; screen readers such as TalkBack still work. Floating windows show again as soon as those screens close.
+**Nothing can be drawn over the lock screen or PIN pad.** While the lock screen, a PIN screen or a confirmation (delete a message, discard a draft, empty a folder, remove an account, trust a certificate, **Forgot PIN?**) is showing, other apps' floating windows such as chat heads are hidden, so they can't cover a button to trick you into tapping it. Apps that aren't real accessibility tools also can't read the lock and PIN screens; screen readers such as TalkBack still work. Floating windows show again as soon as those screens close.
 
 ## Check a download
 

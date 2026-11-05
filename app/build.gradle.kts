@@ -19,11 +19,11 @@ android {
 
     defaultConfig {
         applicationId = "com.vknxworks.mailctrl"
-        minSdk = 33
+        minSdk = 35
         targetSdk = 36
         // Bump both to publish a new release (see CHANGELOG.md).
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 7
+        versionName = "0.1.6"
         // 64-bit ARM phones only (arm64-v8a), like every Ctrl app.
         ndk { abiFilters += listOf("arm64-v8a") }
     }

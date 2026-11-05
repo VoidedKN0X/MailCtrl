@@ -87,7 +87,7 @@ object ScreenGuard {
 
     private fun apply(window: android.view.Window, c: IntArray) {
         runCatching { window.setHideOverlayWindows(c[0] > 0) }
-        if (android.os.Build.VERSION.SDK_INT >= 34) runCatching {
+        runCatching {
             window.decorView.setAccessibilityDataSensitive(
                 if (c[1] > 0) android.view.View.ACCESSIBILITY_DATA_SENSITIVE_YES else android.view.View.ACCESSIBILITY_DATA_SENSITIVE_AUTO,
             )
