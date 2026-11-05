@@ -27,7 +27,11 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
+      # No cache: every library and its metadata (.pom and .module files) is downloaded and recorded, as a
+      # build with a different cache would fetch them.
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-disabled: true
 
       - name: Write verification metadata
         run: |
