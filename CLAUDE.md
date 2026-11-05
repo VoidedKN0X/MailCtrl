@@ -17,3 +17,7 @@ Every new version needs a detailed entry at the top of `CHANGELOG.md`, under a h
 ## Building
 
 The sandbox Claude works in can't download the Android SDK or Gradle dependencies, so the app is compiled by GitHub Actions on every push to `main`. After pushing, check the run (`gh run list`, `gh run view --log-failed`) and fix any compile errors in a follow-up push.
+
+## Dependency verification
+
+Every library and plugin download is checked against `gradle/verification-metadata.xml` (SHA-256 only, no PGP). When you add, remove or update a dependency or Gradle plugin, run the manual **Dependency verification metadata** workflow (`gh api -X POST repos/VoidedKN0X/MailCtrl/actions/workflows/verification-metadata.yml/dispatches -f ref=main`), take the file from its log (gzipped and base64-encoded between the BEGIN/END markers), check the diff (only Maven Central, Google's Maven and the Gradle plugin portal) and commit it in the same push. Keep the `<trusted-artifacts>` entries for `-sources.jar` and `-javadoc.jar`. Never turn verification off or to lenient in CI.

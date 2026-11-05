@@ -369,6 +369,8 @@ fun AppLockGate(content: @Composable () -> Unit) {
 private fun LockFrame(title: String, message: String, error: String?, actions: @Composable () -> Unit) {
     val activity = LocalContext.current.findActivity()
     BackHandler { activity?.moveTaskToBack(true) }
+    // No other app's floating window over the lock screen, and no reading it by apps that aren't accessibility tools.
+    com.vknxworks.mailctrl.ui.components.GuardedScreen(sensitive = true)
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize().systemBarsPadding().padding(32.dp), contentAlignment = Alignment.Center) {
             Column(
@@ -647,6 +649,8 @@ internal fun PinPadScreen(
     bottom: @Composable () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
+    // No other app's floating window over the PIN pad, and no reading it by apps that aren't accessibility tools.
+    com.vknxworks.mailctrl.ui.components.GuardedScreen(sensitive = true)
     Surface(Modifier.fillMaxSize(), color = CtrlColors.Background) {
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             val minHeight = maxHeight

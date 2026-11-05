@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Hides other apps' floating windows while the lock screen, a PIN screen or a confirmation is showing
+         (install-time, no prompt). -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
     <!-- App lock: fingerprint. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- Background checks for new mail survive a restart (WorkManager). -->
@@ -23,9 +26,13 @@
         </intent>
     </queries>
 
+    <!-- Android 16 and newer: explicit intents from other apps (the launcher and its Write shortcut, mailto: links,
+         sharing, ntfy) must match one of the intent filters below; intents without an action are refused.
+         MailCtrl's own intents (notifications) aren't affected. -->
     <application
         android:name=".MailCtrlApp"
         android:allowBackup="false"
+        android:intentMatchingFlags="enforceIntentFilter"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
@@ -48,10 +55,18 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
+            android:requireContentUriPermissionFromCaller="read"
             android:windowSoftInputMode="adjustResize">
+            <!-- requireContentUriPermissionFromCaller (Android 15+): a file shared to MailCtrl must be one the sharing
+                 app can read itself, so no app can make MailCtrl attach something it isn't allowed to see. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- The home-screen "Write" shortcut (res/xml/shortcuts.xml): opens a new message. -->
+            <intent-filter>
+                <action android:name="com.vknxworks.mailctrl.COMPOSE" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <!-- mailto: links from the browser and other apps. -->
             <intent-filter>

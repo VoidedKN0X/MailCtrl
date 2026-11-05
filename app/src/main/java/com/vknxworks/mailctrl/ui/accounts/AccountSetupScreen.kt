@@ -345,6 +345,7 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
     }
 
     untrusted?.let { cert ->
+        com.vknxworks.mailctrl.ui.components.GuardedScreen()
         CtrlAlertDialog(
             onDismissRequest = { untrusted = null },
             title = { Text(stringResource(R.string.cert_title)) },

@@ -147,6 +147,21 @@ Two more switches in the same section work with or without the app lock, and are
 
 The lock, PIN and sign-in screens are always kept out of screenshots and recordings, whatever these switches say.
 
+**Nothing can be drawn over the lock screen or PIN pad.** While the lock screen, a PIN screen or a confirmation (delete a message, discard a draft, empty a folder, remove an account, trust a certificate, **Forgot PIN?**) is showing, other apps' floating windows such as chat heads are hidden, so they can't cover a button to trick you into tapping it. On Android 14 and newer, apps that aren't real accessibility tools also can't read the lock and PIN screens; screen readers such as TalkBack still work. Floating windows show again as soon as those screens close.
+
+## Check a download
+
+Every release is built from this repo by [the build workflow](.github/workflows/build.yml) on GitHub Actions and signed with the same release key. Android refuses an update signed with a different key, and the CtrlF-Droid repo only accepts APKs signed with this one. Its SHA-256 certificate fingerprint is:
+
+```
+E8:0F:B6:89:51:93:44:E1:DB:C9:67:55:55:E4:92:6D:8F:78:1A:D9:CC:48:0C:B9:25:83:5B:4D:F4:9F:50:65
+```
+
+Advanced users can compare it with [AppVerifier](https://github.com/soupslurpr/AppVerifier).
+
+- The APK's SHA-256 checksum is at the bottom of each release's notes. Compare it with `sha256sum MailCtrl-vX.Y.Z.apk` (or `Get-FileHash` on Windows).
+- Each release also has a signed build provenance attestation. With the [GitHub CLI](https://cli.github.com/), `gh attestation verify MailCtrl-vX.Y.Z.apk -R VoidedKN0X/MailCtrl` proves the APK was built by this repo's build workflow from the tagged commit, not uploaded by hand.
+
 ## Permissions
 
 Every permission MailCtrl has, and what it's for:
@@ -160,6 +175,7 @@ Every permission MailCtrl has, and what it's for:
 | Prevent phone from sleeping (`WAKE_LOCK`) | Keeping the phone awake for the few seconds a mail check takes (added by WorkManager) |
 | Ignore battery optimisations (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) | The **Battery** row under profile picture › **Notifications**: when you tap it, Android asks whether MailCtrl may run unrestricted, so checks aren't delayed while the phone sleeps. Nothing changes unless you tap it and say yes |
 | Biometrics (`USE_BIOMETRIC`) | Optional fingerprint unlock for the app lock |
+| Hide other apps' floating windows (`HIDE_OVERLAY_WINDOWS`) | Hide other apps' floating windows over the PIN screen, the lock screen and confirmations, so nothing can be drawn over them to trick a tap |
 
 Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`) that AndroidX adds to every app so only MailCtrl itself can send it internal broadcasts; it gives the app no access to anything. MailCtrl has no contacts, location, camera, microphone, storage or phone permissions: attachments come in through Android's file picker or "Share to MailCtrl".
 
@@ -194,6 +210,8 @@ You need [Android Studio](https://developer.android.com/studio), or JDK 17 and t
 3. The APK is in `app/build/outputs/apk/debug/`. Copy it to your phone and install it.
 
 Or open the folder in Android Studio and press **Run** with your phone connected.
+
+Every library and Gradle plugin download is checked against the SHA-256 checksums in `gradle/verification-metadata.xml`; the build stops if anything doesn't match. When a dependency or plugin changes, run the **Dependency verification metadata** workflow (Actions tab), check the diff of the file it prints, and commit the new file in the same push. On Windows or macOS, Android's `aapt2` tool is a different download that isn't listed, so add `--dependency-verification=lenient` to local builds there.
 
 ## Support the project
 

@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import com.vknxworks.mailctrl.ui.lock.findActivity
 
 /**
  * Screens that always get FLAG_SECURE, whatever "Hide in screenshots" says: signing in (password or
@@ -59,4 +60,49 @@ fun copySensitive(context: Context, label: String, text: String) {
         description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
     }
     context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
+}
+
+/**
+ * Lock, PIN and confirmation screens. While one is showing, other apps' floating windows (chat heads, overlays)
+ * are hidden from its window so they can't cover it or fake a button, and on lock and PIN screens apps that
+ * aren't real accessibility tools can't read the window (Android 14+). Counted per window, so nesting works.
+ */
+object ScreenGuard {
+    private val counts = java.util.WeakHashMap<android.view.Window, IntArray>()
+
+    fun acquire(window: android.view.Window, sensitive: Boolean) {
+        val c = counts.getOrPut(window) { IntArray(2) }
+        c[0]++
+        if (sensitive) c[1]++
+        apply(window, c)
+    }
+
+    fun release(window: android.view.Window, sensitive: Boolean) {
+        val c = counts[window] ?: return
+        c[0] = (c[0] - 1).coerceAtLeast(0)
+        if (sensitive) c[1] = (c[1] - 1).coerceAtLeast(0)
+        apply(window, c)
+        if (c[0] == 0 && c[1] == 0) counts.remove(window)
+    }
+
+    private fun apply(window: android.view.Window, c: IntArray) {
+        runCatching { window.setHideOverlayWindows(c[0] > 0) }
+        if (android.os.Build.VERSION.SDK_INT >= 34) runCatching {
+            window.decorView.setAccessibilityDataSensitive(
+                if (c[1] > 0) android.view.View.ACCESSIBILITY_DATA_SENSITIVE_YES else android.view.View.ACCESSIBILITY_DATA_SENSITIVE_AUTO,
+            )
+        }
+    }
+}
+
+/** Guards the window this screen is shown in (its own dialog window, or the activity's) while it's shown. */
+@Composable
+fun GuardedScreen(sensitive: Boolean = false) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(view, sensitive) {
+        val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            ?: view.context.findActivity()?.window
+        window?.let { ScreenGuard.acquire(it, sensitive) }
+        onDispose { window?.let { ScreenGuard.release(it, sensitive) } }
+    }
 }
