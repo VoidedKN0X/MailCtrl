@@ -14,8 +14,8 @@ on:
       - "gradlew.bat"
   workflow_dispatch:
 
-permissions:
-  contents: read
+# No permissions by default; each job asks for only what it needs, and only the release job can write.
+permissions: {}
 
 concurrency:
   group: build-${{ github.ref }}
@@ -26,6 +26,8 @@ jobs:
   # app/build.gradle.kts are bumped. Other pushes just build to check the code.
   version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.v.outputs.version }}
       tag: ${{ steps.v.outputs.tag }}
@@ -141,27 +143,41 @@ jobs:
     if: needs.version.outputs.release == 'true' && needs.build.outputs.release_signed == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write       # publish the release
+      id-token: write       # sign the build provenance attestation
+      attestations: write   # store it with the repo
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
           fetch-depth: 0   # full history and tags, for the release notes
 
-      - name: Write release notes
-        env:
-          TAG: ${{ needs.version.outputs.tag }}
-        run: |
-          bash .github/scripts/release-notes.sh "$TAG" "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
-          cat "$RUNNER_TEMP/notes.md"
-
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: MailCtrl-apk
           path: out
 
+      # Signed proof (Sigstore) that this APK was built by this workflow from this commit.
+      # Check it with: gh attestation verify <apk> -R VoidedKN0X/MailCtrl
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: out/*.apk
+
+      - name: Write release notes
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          bash .github/scripts/release-notes.sh "$TAG" "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
+          # The APK's SHA-256, to check a download against.
+          echo >> "$RUNNER_TEMP/notes.md"
+          for f in out/*.apk; do
+            printf 'SHA-256: `%s`  %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$(basename "$f")" >> "$RUNNER_TEMP/notes.md"
+          done
+          cat "$RUNNER_TEMP/notes.md"
+
       - name: Publish release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2 # zizmor: ignore[superfluous-actions] allowed by the repo action policy and already pinned
         with:
           tag_name: ${{ needs.version.outputs.tag }}
           target_commitish: ${{ github.sha }}

@@ -1,0 +1,51 @@
+name: Dependency verification metadata
+
+# Started by hand after a dependency or Gradle plugin changes. Writes the sha256 of every library
+# and plugin the build downloads to gradle/verification-metadata.xml and prints the file to the log
+# (gzipped, base64, between the BEGIN/END markers). Check the diff and commit it in the same push
+# as the dependency change; the normal build then refuses any download that doesn't match.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: Write verification metadata
+        run: |
+          # The build refuses to configure a release on CI without a signing key, so sign this throwaway
+          # build with a key made here and thrown away with the runner. Only the downloads matter, and
+          # they're the same as the real signed build's.
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/throwaway.jks" -storepass throwaway -keypass throwaway \
+            -alias throwaway -keyalg RSA -keysize 2048 -validity 1 -dname CN=throwaway
+          export SIGNING_KEYSTORE_PATH="$RUNNER_TEMP/throwaway.jks"
+          export KEYSTORE_PASSWORD=throwaway
+          export KEY_ALIAS=throwaway
+          export KEY_PASSWORD=throwaway
+          chmod +x gradlew
+          ./gradlew --no-daemon --write-verification-metadata sha256 assembleDebug assembleRelease :app:dependencies --configuration releaseRuntimeClasspath
+
+      - name: Print the file
+        run: |
+          echo "----- BEGIN verification-metadata.xml.gz.b64 -----"
+          gzip -9c gradle/verification-metadata.xml | base64 -w 0
+          echo
+          echo "----- END verification-metadata.xml.gz.b64 -----"

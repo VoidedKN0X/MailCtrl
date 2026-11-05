@@ -4,6 +4,15 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## Project updates (2026-11-05)
+
+### Project
+
+- **Releases can be checked against this repo.** Each release now carries a signed build provenance attestation (made by GitHub with Sigstore) that ties the APK to this repo's build workflow and the tagged commit, and the release notes list the APK's SHA-256 checksum.
+- **Tighter build workflows.** Every workflow starts with no permissions and each job gets only what it needs; only the release job can write, and only to publish the release and its attestation.
+- **New security checks on GitHub:** zizmor checks the workflows for security problems on every workflow change, and CodeQL scans the app's code every week and on every app change (results in the Security tab; it never blocks a release).
+- **New manual workflow** that records the SHA-256 of every library and Gradle plugin the build downloads, so the build can refuse anything that has been changed or swapped. No app changes, so no new version.
+
 ## v0.1.4 (2026-11-05)
 
 Other apps can no longer open your messages through MailCtrl, and with the app lock on, notifications no longer show your mail unless you want them to.
