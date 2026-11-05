@@ -43,9 +43,16 @@ jobs:
           languages: java-kotlin
           build-mode: manual
 
-      # Debug build: no signing key, no secrets.
+      # Debug build, no secrets. The build refuses to configure on CI without a release key, so it gets a
+      # throwaway one made here (nothing is signed with it).
       - name: Build
         run: |
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/throwaway.jks" -storepass throwaway -keypass throwaway \
+            -alias throwaway -keyalg RSA -keysize 2048 -validity 1 -dname CN=throwaway
+          export SIGNING_KEYSTORE_PATH="$RUNNER_TEMP/throwaway.jks"
+          export KEYSTORE_PASSWORD=throwaway
+          export KEY_ALIAS=throwaway
+          export KEY_PASSWORD=throwaway
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
