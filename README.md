@@ -144,6 +144,22 @@ Two more switches in the same section work with or without the app lock, and are
 
 The lock, PIN and sign-in screens are always kept out of screenshots and recordings, whatever these switches say.
 
+## Permissions
+
+Every permission MailCtrl has, and what it's for:
+
+| Permission | What MailCtrl uses it for |
+| --- | --- |
+| Internet (`INTERNET`) | Connecting to your own mail servers (IMAP and SMTP), and to your own ntfy address when you tap **Send a test wake-up** |
+| Network state (`ACCESS_NETWORK_STATE`) | Only running background mail checks when the phone is online |
+| Notifications (`POST_NOTIFICATIONS`) | New-mail notifications; asked for when you turn notifications on |
+| Run at startup (`RECEIVE_BOOT_COMPLETED`) | Setting the background mail checks up again after the phone restarts (through Android's WorkManager) |
+| Prevent phone from sleeping (`WAKE_LOCK`) | Keeping the phone awake for the few seconds a mail check takes (added by WorkManager) |
+| Ignore battery optimisations (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) | The **Battery** row under profile picture › **Notifications**: when you tap it, Android asks whether MailCtrl may run unrestricted, so checks aren't delayed while the phone sleeps. Nothing changes unless you tap it and say yes |
+| Biometrics (`USE_BIOMETRIC`) | Optional fingerprint unlock for the app lock |
+
+Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`) that AndroidX adds to every app so only MailCtrl itself can send it internal broadcasts; it gives the app no access to anything. MailCtrl has no contacts, location, camera, microphone, storage or phone permissions: attachments come in through Android's file picker or "Share to MailCtrl".
+
 ## Privacy
 
 **Telemetry-free.** MailCtrl has no analytics, crash reporting, usage stats or tracking of any kind.
@@ -154,6 +170,8 @@ The lock, PIN and sign-in screens are always kept out of screenshots and recordi
 - **No tracking pixels:** pictures from the internet stay blocked unless you load them, and the message viewer never looks links up online.
 - **The phone's name stays private:** MailCtrl greets mail servers with a neutral address instead of your phone's name, makes Message-IDs without the app's name in them, and adds no "sent with" header.
 - **On the phone:** your accounts, settings, drafts (encrypted) and the list of your messages. Downloaded attachments are cleared when MailCtrl starts again.
+- **Links:** the **Make an app password** button opens your provider's own page (myaccount.google.com, login.yahoo.com or account.apple.com) in your browser, the **Install ntfy** button (when ntfy is missing) opens ntfy's page on f-droid.org, and the Support, Report a bug, Source code and Licence rows open GitHub or gnu.org. Only when you tap them; MailCtrl itself never contacts these sites.
+- **Message viewer:** HTML mail is shown in a locked-down web view with no scripts, forms or frames and no online link checks or usage reports. Links in a message ask before they open in your browser.
 - **No automatic backups:** Android doesn't back up MailCtrl's data or move it to a new phone. Your mail stays on your servers; on a new phone you just sign in again.
 
 ## Build from source
@@ -178,6 +196,8 @@ Or open the folder in Android Studio and press **Run** with your phone connected
 
 MailCtrl is free and open source. If it's useful to you, tap **Support MailCtrl** on the You page (tap your profile picture) to sponsor development on [GitHub Sponsors](https://github.com/sponsors/VoidedKN0X). Found a problem or have an idea? Tap **Report a bug** in the same place, or [open an issue](https://github.com/VoidedKN0X/MailCtrl/issues). Starring the repo helps too.
 
+Found a security problem? Please don't open a public issue; see [SECURITY.md](SECURITY.md).
+
 ## The Ctrl series
 
 Native Android apps for self-hosted services and everyday tools, all with the same Material You design.
@@ -187,21 +207,31 @@ Native Android apps for self-hosted services and everyday tools, all with the sa
 | [AdCtrl](https://github.com/VoidedKN0X/AdCtrl) | Control your AdGuard Home DNS server |
 | [ArrCtrl](https://github.com/VoidedKN0X/ArrCtrl) | Radarr, Sonarr, Prowlarr, Bazarr, qBittorrent, autobrr and Cleanuparr in one app |
 | [BeamCtrl](https://github.com/VoidedKN0X/BeamCtrl) | TV remote for phones with an IR blaster |
+| [CallCtrl](https://github.com/VoidedKN0X/CallCtrl) | Phone app: dialer, call history and in-call screen |
+| [ChatCtrl](https://github.com/VoidedKN0X/ChatCtrl) | Matrix chat client for matrix.org and self-hosted Synapse |
+| [ClockCtrl](https://github.com/VoidedKN0X/ClockCtrl) | Alarms, timers, stopwatch and world clock |
+| [ContactCtrl](https://github.com/VoidedKN0X/ContactCtrl) | Contacts: browse, edit, import and export |
 | [CraftyCtrl](https://github.com/VoidedKN0X/CraftyCtrl) | Manage Minecraft servers on Crafty Controller |
-| [ElementCtrl](https://github.com/VoidedKN0X/ElementCtrl) | Matrix chat client for matrix.org and self-hosted Synapse |
+| [DateCtrl](https://github.com/VoidedKN0X/DateCtrl) | Calendar for the calendars on your phone and your accounts |
 | [FilesCtrl](https://github.com/VoidedKN0X/FilesCtrl) | File manager with NFS, SMB, SFTP, FTP and WebDAV |
 | [FrigateCtrl](https://github.com/VoidedKN0X/FrigateCtrl) | Watch and review your Frigate NVR cameras |
 | [ImmichCtrl](https://github.com/VoidedKN0X/ImmichCtrl) | Photos and backup for your Immich server |
 | [JellyCtrl](https://github.com/VoidedKN0X/JellyCtrl) | Movies, shows, music and Live TV from Jellyfin |
-| **MailCtrl** (this app) | Your email, private and Google-free |
+| [LijnCtrl](https://github.com/VoidedKN0X/LijnCtrl) | Live De Lijn bus and tram departures |
+| **MailCtrl** (this app) | Email for Gmail and Proton Mail |
 | [MemoCtrl](https://github.com/VoidedKN0X/MemoCtrl) | Notes on your Memos server |
 | [NaviCtrl](https://github.com/VoidedKN0X/NaviCtrl) | Music player for Navidrome servers |
 | [PaperCtrl](https://github.com/VoidedKN0X/PaperCtrl) | Scan and browse documents on Paperless-ngx |
 | [PrintCtrl](https://github.com/VoidedKN0X/PrintCtrl) | Bambu Lab printers through Bambuddy, and Spoolman spools |
 | [ProxCtrl](https://github.com/VoidedKN0X/ProxCtrl) | Manage your Proxmox VE server |
+| **RecorderCtrl** (this app) | Private, offline voice recorder |
+| [RideCtrl](https://github.com/VoidedKN0X/RideCtrl) | Offline maintenance, fuel and mod log for your vehicles |
 | [SeerrCtrl](https://github.com/VoidedKN0X/SeerrCtrl) | Request movies and shows on Seerr / Jellyseerr |
-| [TextCtrl](https://github.com/VoidedKN0X/TextCtrl) | Texts and picture messages, private and Google-free |
+| [SumCtrl](https://github.com/VoidedKN0X/SumCtrl) | Offline calculator, unit converter and work tools |
+| [SynapseCtrl](https://github.com/VoidedKN0X/SynapseCtrl) | Administer your Matrix Synapse server |
+| [TextCtrl](https://github.com/VoidedKN0X/TextCtrl) | Private SMS and MMS messaging |
 | [TrueCtrl](https://github.com/VoidedKN0X/TrueCtrl) | Monitor and manage your TrueNAS server |
+| [WrtCtrl](https://github.com/VoidedKN0X/WrtCtrl) | Manage your OpenWrt router |
 
 ## License
 

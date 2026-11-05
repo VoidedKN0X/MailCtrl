@@ -4,6 +4,24 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.1.3 (2026-11-05)
+
+An unused permission is gone, release builds no longer keep library debug logging, and there's now a security policy and a full permission list.
+
+### Privacy
+
+- **The foreground-service permission is gone.** Android's background work library added it, but MailCtrl's mail checks never run as a foreground service, so Android no longer lists it for MailCtrl.
+- **No debug logging in release builds.** Debug, verbose and info messages from the libraries MailCtrl uses are now stripped from the app, so nothing about your accounts or mail can end up in the phone's system log. MailCtrl's own code already logged nothing.
+- **One less entry point for other apps.** A receiver the Android build tools add for developer tooling (the profile installer) is removed, as in the other Ctrl apps. Only a connected computer could reach it, so nothing changes for you.
+- The **Ignore battery optimisations** permission stays: it's only used by the **Battery** row under **Notifications**, which asks Android to let MailCtrl run unrestricted when you tap it. The README now explains it.
+
+### Project
+
+- New **SECURITY.md**: how to report a security problem privately, what counts, how MailCtrl protects you, and the fingerprint of the key every release is signed with.
+- The build now checks that the Gradle wrapper is an official Gradle release, and fails if any Google Play services, Firebase, ML Kit, Play Core or Tink library ever ends up in the app.
+- `.gitignore` also covers signing-key property files, `.p12` keys, `local.properties` in any folder and `google-services.json`, so they can't be committed by accident.
+- README: a new **Permissions** section with every permission and what it's for, the links the app opens and the message viewer's protections under Privacy, a pointer to SECURITY.md, and the Ctrl series list now has all 28 apps with their current names (ElementCtrl is now ChatCtrl).
+
 ## v0.1.2 (2026-10-27)
 
 A shortcut to make an app password while adding an account.

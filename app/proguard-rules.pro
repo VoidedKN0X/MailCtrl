@@ -25,3 +25,11 @@
 -dontwarn javax.activation.**
 -dontwarn com.sun.mail.**
 -dontwarn myjava.awt.datatransfer.**
+
+# No debug, verbose or info logging in release builds (MailCtrl's own code doesn't log; this also silences
+# libraries).
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
