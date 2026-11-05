@@ -4,6 +4,18 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.1.4 (2026-11-05)
+
+Other apps can no longer open your messages through MailCtrl, and with the app lock on, notifications no longer show your mail unless you want them to.
+
+### Security
+
+- **Only MailCtrl's own notifications can open a message.** Tapping a new-mail notification opens that message. Before, any other app on the phone could ask MailCtrl to open a message the same way, by account, folder and message number. MailCtrl's notifications now carry a secret that's made once on your phone, and a request to open a message without it just opens the inbox. Notifications open their message as before, and the **Compose** shortcut on the app icon, mailto: links and sharing to MailCtrl work as before.
+
+### Changed
+
+- **With the app lock on, notifications just say "New mail" by default.** Before, new-mail notifications showed the sender and subject even while MailCtrl was locked, so anyone holding the unlocked phone could read who wrote to you and about what without the PIN. Now, if you never picked a **Notification content** yourself, notifications only say "New mail" while the app lock is on (and still show the sender and subject when it's off). If you did pick one under **Settings > Privacy and security > Notification content**, MailCtrl keeps using your choice. If you had picked "Sender only" or "Just New mail" before this update, that choice is kept; if you want sender and subject while the app lock is on, pick **Sender and subject** there.
+
 ## v0.1.3 (2026-11-05)
 
 An unused permission is gone, release builds no longer keep library debug logging, and there's now a security policy and a full permission list.

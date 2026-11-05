@@ -122,7 +122,9 @@ For **instant notifications**, MailCtrl can be woken through the **[ntfy](https:
 
 A wake-up carries no mail at all: MailCtrl ignores what's in it and checks your servers itself, so the push address can't be used to show you fake mail. Background checks keep running as a fallback.
 
-**Notification content** (under Settings) chooses what notifications show: sender and subject, the sender only, or just "New mail". The lock screen only shows "New mail" unless Android is set to show everything there.
+**Notification content** (under Settings) chooses what notifications show: sender and subject, the sender only, or just "New mail". Until you pick one yourself, notifications show the sender and subject, or just "New mail" while the [app lock](#app-lock) is on, so a locked MailCtrl doesn't show your mail in the notification shade. Once you pick one, your choice is used whether the app lock is on or off. The lock screen only shows "New mail" unless Android is set to show everything there.
+
+Tapping a notification opens that message. Other apps can't use this to open a message: only MailCtrl's own notifications can, and anything else just opens the inbox.
 
 ## App lock
 
@@ -133,6 +135,7 @@ Turn it on under your profile picture › **Settings > Privacy and security > Ap
 - **Drafts are encrypted with the PIN while MailCtrl is locked.** The key only exists in memory while the app is unlocked and is wiped the moment it locks. The PIN itself is never stored: it's stretched with 600,000 rounds of PBKDF2 and mixed with a key held in the phone's secure hardware.
 - **Passwords:** with notifications **off**, your account passwords are sealed with the PIN too, so nothing can sign in to your mail while MailCtrl is locked. With notifications **on**, background checks need them while the app is locked, so they're encrypted with the phone's secure hardware only (as without the app lock). Settings shows which applies.
 - **Wrong PINs:** after 5 tries you wait 30 seconds, doubling up to 15 minutes. Restarting the app or the phone, or changing the clock, doesn't skip the wait.
+- **Notifications** just say "New mail" while the app lock is on, unless you chose a **Notification content** yourself (see [Notifications](#notifications)).
 - **Lock again:** as soon as you leave the app (the default), after 1, 5 or 15 minutes or 1 hour away, or only when the app restarts. Picking files to attach, sharing and opening an attachment don't count as leaving, unless you stay away for more than 5 minutes.
 - **Forgot your PIN?** It can't be recovered. The lock screen lets you reset the app lock after confirming it's you with your phone's own screen lock; drafts encrypted with the old PIN are deleted, and accounts whose password was sealed with it ask for it again. Your mail stays on your servers.
 - **With the app lock on**, the recent-apps screen always shows a blank card.

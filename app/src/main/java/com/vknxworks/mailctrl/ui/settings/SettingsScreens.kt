@@ -354,7 +354,7 @@ fun SettingsScreen() {
                 GroupChoice(
                     stringResource(R.string.notify_content),
                     NotificationContent.entries.map { it to stringResource(it.label) },
-                    s.notificationContent,
+                    s.notificationContentFor(lockOn),
                     icon = Icons.Outlined.Notifications,
                 ) { v -> update { it.copy(notificationContent = v) } }
             }

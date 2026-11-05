@@ -63,7 +63,11 @@ data class AppSettings(
     val notifyEnabled: Boolean = true,
     /** Minutes between background checks; 0 = only when ntfy wakes MailCtrl. */
     val notifyInterval: Int = 15,
-    val notificationContent: NotificationContent = NotificationContent.SENDER_AND_SUBJECT,
+    /**
+     * What new-mail notifications show, as the user chose it; null when they never picked one. Use
+     * [notificationContentFor]: without a choice, notifications only say "New mail" while the app lock is on.
+     */
+    val notificationContent: NotificationContent? = null,
     /** Wake-ups through ntfy (UnifiedPush). */
     val pushEnabled: Boolean = false,
     /** The push address ntfy gave MailCtrl. */
@@ -79,7 +83,11 @@ data class AppSettings(
     val confirmDelete: Boolean = false,
     /** The account new messages are written from (id), or empty for the first one. */
     val defaultAccount: String = "",
-)
+) {
+    /** The notification content in effect: the user's own choice, or the default for the app lock's state. */
+    fun notificationContentFor(lockOn: Boolean): NotificationContent =
+        notificationContent ?: if (lockOn) NotificationContent.NOTHING else NotificationContent.SENDER_AND_SUBJECT
+}
 
 class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     private object K {
@@ -89,6 +97,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val notifyEnabled = booleanPreferencesKey("notify_enabled")
         val notifyInterval = intPreferencesKey("notify_interval")
         val notificationContent = stringPreferencesKey("notification_content")
+        /** Set once the user picks a notification content themselves (0.1.4 and later). */
+        val notificationContentChosen = booleanPreferencesKey("notification_content_chosen")
         val pushEnabled = booleanPreferencesKey("push_enabled")
         val pushEndpoint = stringPreferencesKey("push_endpoint")
         val remoteContent = stringPreferencesKey("remote_content")
@@ -116,7 +126,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         hideRecents = this[K.hideRecents] ?: false,
         notifyEnabled = this[K.notifyEnabled] ?: true,
         notifyInterval = this[K.notifyInterval] ?: 15,
-        notificationContent = enumOr(this[K.notificationContent], NotificationContent.SENDER_AND_SUBJECT),
+        notificationContent = storedNotificationContent(),
         pushEnabled = this[K.pushEnabled] ?: false,
         pushEndpoint = this[K.pushEndpoint],
         remoteContent = enumOr(this[K.remoteContent], RemoteContent.ASK),
@@ -136,7 +146,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             p[K.hideRecents] = s.hideRecents
             p[K.notifyEnabled] = s.notifyEnabled
             p[K.notifyInterval] = s.notifyInterval
-            p[K.notificationContent] = s.notificationContent.name
+            val content = s.notificationContent
+            if (content != null) p[K.notificationContent] = content.name else p.remove(K.notificationContent)
+            p[K.notificationContentChosen] = content != null
             p[K.pushEnabled] = s.pushEnabled
             val endpoint = s.pushEndpoint
             if (endpoint != null) p[K.pushEndpoint] = endpoint else p.remove(K.pushEndpoint)
@@ -147,6 +159,20 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             p[K.swipeLeft] = s.swipeLeft.name
             p[K.confirmDelete] = s.confirmDelete
             p[K.defaultAccount] = s.defaultAccount
+        }
+    }
+
+    /**
+     * The user's own choice, or null. Before 0.1.4 every settings change also saved this setting's default
+     * ("Sender and subject"), so a stored value without the "chosen" flag only counts as a choice when it
+     * differs from that default.
+     */
+    private fun Preferences.storedNotificationContent(): NotificationContent? {
+        val stored = this[K.notificationContent]?.let { n -> NotificationContent.entries.firstOrNull { it.name == n } }
+        return when (this[K.notificationContentChosen]) {
+            true -> stored
+            false -> null
+            null -> stored?.takeIf { it != NotificationContent.SENDER_AND_SUBJECT }
         }
     }
 

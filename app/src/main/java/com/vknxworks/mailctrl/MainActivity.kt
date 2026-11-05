@@ -66,10 +66,12 @@ class MainActivity : ComponentActivity() {
 
     private fun actionFor(intent: Intent): PendingAction? = when (intent.action) {
         ACTION_OPEN_MESSAGE -> {
+            // Only MailCtrl's own notifications may open a message; anything else just opens the inbox.
+            val own = container.notifier.isOwnLink(intent.getStringExtra(EXTRA_SECRET))
             val account = intent.getStringExtra(EXTRA_ACCOUNT)
             val folder = intent.getStringExtra(EXTRA_FOLDER)
             val uid = intent.getLongExtra(EXTRA_UID, -1L)
-            if (account != null && folder != null && uid > 0) PendingAction.OpenMessage(account, folder, uid) else PendingAction.OpenInbox
+            if (own && account != null && folder != null && uid > 0) PendingAction.OpenMessage(account, folder, uid) else PendingAction.OpenInbox
         }
         ACTION_OPEN_INBOX -> PendingAction.OpenInbox
         ACTION_COMPOSE -> PendingAction.Compose()
@@ -127,6 +129,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_ACCOUNT = "account"
         const val EXTRA_FOLDER = "folder"
         const val EXTRA_UID = "uid"
+        const val EXTRA_SECRET = "secret"
         private const val MAX_SHARED_FILES = 20
     }
 }

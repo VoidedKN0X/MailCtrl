@@ -14,6 +14,8 @@ import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.data.accounts.Account
 import com.vknxworks.mailctrl.data.settings.NotificationContent
 import com.vknxworks.mailctrl.mail.MessageHeader
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 /** New-mail notifications: one per message, grouped per account. */
 class Notifier(private val context: Context) {
@@ -35,6 +37,24 @@ class Notifier(private val context: Context) {
 
     private fun color() = ContextCompat.getColor(context, R.color.notify_accent)
 
+    /**
+     * A random secret made once per install. MainActivity is exported (it's the launcher), so "open this
+     * message" is only accepted from intents that carry it, which only MailCtrl's own notifications do.
+     */
+    private val linkSecret: String by lazy {
+        val prefs = context.getSharedPreferences(LINK_PREFS, Context.MODE_PRIVATE)
+        prefs.getString(K_LINK_SECRET, null)?.takeIf { it.length >= 32 } ?: run {
+            val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            val secret = bytes.joinToString("") { "%02x".format(it) }
+            prefs.edit().putString(K_LINK_SECRET, secret).commit()
+            secret
+        }
+    }
+
+    /** Whether [secret] is the one MailCtrl's own notifications carry. */
+    fun isOwnLink(secret: String?): Boolean =
+        !secret.isNullOrEmpty() && MessageDigest.isEqual(secret.toByteArray(), linkSecret.toByteArray())
+
     private fun openIntent(h: MessageHeader?, requestCode: Int): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -43,6 +63,7 @@ class Notifier(private val context: Context) {
                 putExtra(MainActivity.EXTRA_ACCOUNT, h.accountId)
                 putExtra(MainActivity.EXTRA_FOLDER, h.folder)
                 putExtra(MainActivity.EXTRA_UID, h.uid)
+                putExtra(MainActivity.EXTRA_SECRET, linkSecret)
             } else {
                 action = MainActivity.ACTION_OPEN_INBOX
             }
@@ -177,6 +198,8 @@ class Notifier(private val context: Context) {
         const val CH_PROBLEMS = "problems"
         private const val TAG = "mail"
         private const val TAG_PROBLEM = "problem"
+        private const val LINK_PREFS = "notify_links"
+        private const val K_LINK_SECRET = "link_secret"
 
         fun allowed(context: Context): Boolean {
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

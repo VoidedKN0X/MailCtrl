@@ -69,7 +69,7 @@ object NotifyChecker {
                 if (r.fresh.isNotEmpty()) {
                     // The inbox list shows them too, the next time it's opened.
                     c.cache.putOlder(r.fresh)
-                    c.notifier.newMail(a, r.fresh, s.notificationContent, all.size > 1)
+                    c.notifier.newMail(a, r.fresh, s.notificationContentFor(c.vault.enabled), all.size > 1)
                 }
             } catch (e: CancellationException) {
                 throw e
