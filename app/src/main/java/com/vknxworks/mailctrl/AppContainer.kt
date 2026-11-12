@@ -52,7 +52,7 @@ class AppContainer(val context: Context) {
     val accounts = AccountStore(context, vault)
     val cache = MailCache(context)
     val mail = MailClient(context, accounts)
-    val actions = MailActions(mail, cache, accounts)
+    val actions = MailActions(mail, cache, accounts, appScope)
     val drafts = DraftStore(context, vault)
     val notifier = Notifier(context)
 
@@ -110,6 +110,8 @@ class AppContainer(val context: Context) {
     fun onLocked() {
         vault.close()
         lastOpened = null
+        // Messages kept in memory to open quickly are forgotten while locked.
+        mail.forgetBodies()
         if (accounts.anySealed()) mail.closeAll()
     }
 

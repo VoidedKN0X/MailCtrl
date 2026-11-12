@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.net.MailTo
 import android.net.Uri
 import android.os.Bundle
+import android.os.Looper
+import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -48,6 +50,22 @@ class MainActivity : ComponentActivity() {
                 AppLockGate { AppRoot() }
             }
         }
+        warmUpViewer()
+    }
+
+    /**
+     * The message viewer's engine (WebView) takes a moment to start the first time in a run of the app. It's started
+     * once while the app is idle after opening, so the first message you open shows straight away. Nothing is loaded.
+     */
+    private fun warmUpViewer() {
+        if (viewerWarm) return
+        viewerWarm = true
+        window.decorView.postDelayed({
+            Looper.myQueue().addIdleHandler {
+                runCatching { WebView(this).destroy() }
+                false
+            }
+        }, 1_500)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -123,6 +141,9 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /** Whether the message viewer was started once in this run of the app. */
+        private var viewerWarm = false
+
         const val ACTION_OPEN_MESSAGE = "com.vknxworks.mailctrl.OPEN_MESSAGE"
         const val ACTION_OPEN_INBOX = "com.vknxworks.mailctrl.OPEN_INBOX"
         const val ACTION_COMPOSE = "com.vknxworks.mailctrl.COMPOSE"

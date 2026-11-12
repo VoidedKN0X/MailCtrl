@@ -5,9 +5,13 @@ import com.vknxworks.mailctrl.data.cache.MailCache
 import com.vknxworks.mailctrl.mail.FolderInfo
 import com.vknxworks.mailctrl.mail.MailClient
 import com.vknxworks.mailctrl.mail.MessageHeader
+import android.os.SystemClock
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import javax.mail.Flags
 
 /**
@@ -18,17 +22,54 @@ class MailActions(
     private val mail: MailClient,
     private val cache: MailCache,
     private val accounts: AccountStore,
+    /** For reading ahead, which outlives the screen that started it. */
+    private val scope: CoroutineScope,
 ) {
-    /** Newest messages of a folder, from the server. */
-    suspend fun refresh(accountId: String, folder: String) {
-        val cached = cache.messages(accountId, folder).size
-        val page = mail.messages(accountId, folder, count = cached.coerceIn(PAGE, MAX_REFRESH))
-        cache.putNewest(accountId, folder, page.headers, complete = !page.hasMore)
+    /** When each folder (and each account's folder list) was last brought up to date, on the phone's clock. */
+    private val refreshed = ConcurrentHashMap<String, Long>()
+
+    private fun stamp(key: String) {
+        refreshed[key] = SystemClock.elapsedRealtime()
     }
 
-    /** Refreshes every account's inbox at once. Returns the problems, per account. */
-    suspend fun refreshInboxes(accountIds: List<String>): Map<String, Throwable> = coroutineScope {
-        accountIds.map { id -> async { id to runCatching { refresh(id, INBOX) }.exceptionOrNull() } }
+    /** Whether [key] was brought up to date less than [maxAgeMs] ago. */
+    private fun fresh(key: String, maxAgeMs: Long): Boolean =
+        refreshed[key]?.let { SystemClock.elapsedRealtime() - it < maxAgeMs } == true
+
+    /** Whether a folder's list was refreshed less than [maxAgeMs] ago (switching back to a tab doesn't refresh again). */
+    fun isFresh(accountId: String, folder: String, maxAgeMs: Long = RECENT_MS): Boolean = fresh("$accountId|$folder", maxAgeMs)
+
+    fun foldersFresh(accountId: String, maxAgeMs: Long = FOLDERS_RECENT_MS): Boolean = fresh("$accountId|folders", maxAgeMs)
+
+    /** Brings a folder's list up to date with the server, downloading only what changed. */
+    suspend fun refresh(accountId: String, folder: String) {
+        val known = cache.known(accountId, folder, SYNC_WINDOW)
+        val sync = mail.sync(accountId, folder, known, PAGE)
+        cache.applySync(accountId, folder, sync)
+        stamp("$accountId|$folder")
+        if (folder == INBOX) readAhead(accountId, folder)
+    }
+
+    /**
+     * Reads the newest few unread messages ahead in the background, so they open instantly. They stay unread, and
+     * nothing from the internet is loaded.
+     */
+    private fun readAhead(accountId: String, folder: String) {
+        scope.launch {
+            runCatching {
+                val unread = cache.messages(accountId, folder).asSequence().filter { !it.seen }.take(READ_AHEAD).map { it.uid }.toList()
+                mail.prefetch(accountId, folder, unread)
+            }
+        }
+    }
+
+    /**
+     * Refreshes the inboxes of [accountIds] at once, skipping those refreshed less than [maxAgeMs] ago (0: all of
+     * them). Returns the problems, per account.
+     */
+    suspend fun refreshInboxes(accountIds: List<String>, maxAgeMs: Long = 0): Map<String, Throwable> = coroutineScope {
+        accountIds.filter { maxAgeMs <= 0 || !isFresh(it, INBOX, maxAgeMs) }
+            .map { id -> async { id to runCatching { refresh(id, INBOX) }.exceptionOrNull() } }
             .awaitAll()
             .mapNotNull { (id, e) -> e?.let { id to it } }
             .toMap()
@@ -48,6 +89,7 @@ class MailActions(
     suspend fun refreshFolders(accountId: String): List<FolderInfo> {
         val list = mail.folders(accountId)
         cache.putFolders(accountId, list)
+        stamp("$accountId|folders")
         return list
     }
 
@@ -130,6 +172,15 @@ class MailActions(
     companion object {
         const val INBOX = "INBOX"
         const val PAGE = 50
-        private const val MAX_REFRESH = 200
+
+        /** How many of a folder's newest messages on the phone are checked for changes on every refresh. */
+        private const val SYNC_WINDOW = 300
+
+        /** Unread messages read ahead after an inbox refresh. */
+        private const val READ_AHEAD = 5
+
+        /** Opening a tab again within this time shows what's there without asking the server again. */
+        const val RECENT_MS = 30_000L
+        const val FOLDERS_RECENT_MS = 120_000L
     }
 }

@@ -94,7 +94,7 @@ Then:
 - **Pictures from the internet** are blocked, because loading them tells the sender when and where you opened the message (that's how tracking pixels work). Tap **Load** to show them for that message, or choose **Always load** in Settings. Pictures sent inside the message always show.
 - **Plain-text messages** show as text, with links and addresses you can tap (they ask first too).
 - **Unsubscribe**: when a newsletter offers it, it's in the message's menu.
-- MailCtrl keeps a **list of your messages** on the phone (sender, subject, date, flags) so it opens instantly; the messages themselves are fetched from your server when you open them.
+- MailCtrl keeps a **list of your messages** on the phone (sender, subject, date, flags) so it opens instantly, and refreshes it by downloading only what changed. The messages themselves are fetched from your server when you open them; the few you opened lately (and the newest unread ones, read ahead) are kept **in memory only** so they open again instantly, and forgotten when MailCtrl locks or closes.
 
 ## Notifications
 
@@ -188,7 +188,7 @@ Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORT
 - **Encrypted connections** (SSL/TLS or STARTTLS) are checked like a browser does. A server whose certificate the phone doesn't trust is refused unless you trust that exact certificate yourself. STARTTLS is required, never optional: a server that suddenly stops offering it is refused rather than used unencrypted. "None" is only for servers on your own network or over a VPN.
 - **No tracking pixels:** pictures from the internet stay blocked unless you load them, and the message viewer never looks links up online.
 - **The phone's name stays private:** MailCtrl greets mail servers with a neutral address instead of your phone's name, makes Message-IDs without the app's name in them, and adds no "sent with" header.
-- **On the phone:** your accounts, settings, drafts (encrypted) and the list of your messages. Downloaded attachments are cleared when MailCtrl starts again.
+- **On the phone:** your accounts, settings, drafts (encrypted) and the list of your messages. Downloaded attachments are cleared when MailCtrl starts again. Messages you opened lately are kept in memory only, never written to storage, and forgotten when MailCtrl locks or closes.
 - **Links:** the **Make an app password** button opens your provider's own page (myaccount.google.com, login.yahoo.com or account.apple.com) in your browser, the **Install ntfy** button (when ntfy is missing) opens ntfy's page on f-droid.org, and the Support, Report a bug, Source code and Licence rows open GitHub or gnu.org. Only when you tap them; MailCtrl itself never contacts these sites.
 - **Message viewer:** HTML mail is shown in a locked-down web view with no scripts, forms or frames and no online link checks or usage reports. Links in a message ask before they open in your browser.
 - **No automatic backups:** Android doesn't back up MailCtrl's data or move it to a new phone. Your mail stays on your servers; on a new phone you just sign in again.

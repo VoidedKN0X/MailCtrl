@@ -8,6 +8,8 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.vknxworks.mailctrl.mail.Address
 import com.vknxworks.mailctrl.mail.FolderInfo
 import com.vknxworks.mailctrl.mail.FolderRole
+import com.vknxworks.mailctrl.mail.FolderSync
+import com.vknxworks.mailctrl.mail.KnownRange
 import com.vknxworks.mailctrl.mail.MessageHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +25,7 @@ import kotlinx.serialization.json.Json
  * shows something without a connection. Only headers (sender, subject, date, flags): the messages themselves
  * are fetched from the server when you open them.
  */
-class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", null, 1) {
+class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", null, 2) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val addrList = ListSerializer(Address.serializer())
@@ -57,12 +59,22 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
             )
             """.trimIndent(),
         )
+        // The server's numbering of each folder (UIDVALIDITY): while it stays the same, only changes are downloaded.
+        db.execSQL(
+            """
+            CREATE TABLE folder_sync (
+                account TEXT NOT NULL, folder TEXT NOT NULL, validity INTEGER NOT NULL,
+                PRIMARY KEY (account, folder)
+            )
+            """.trimIndent(),
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Only a cache: start over.
         db.execSQL("DROP TABLE IF EXISTS messages")
         db.execSQL("DROP TABLE IF EXISTS folders")
+        db.execSQL("DROP TABLE IF EXISTS folder_sync")
         onCreate(db)
     }
 
@@ -189,6 +201,65 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
         changed()
     }
 
+    // ------------------------------------------------------------------ syncing
+
+    /** What the phone has of a folder: its numbering and the newest [limit] message numbers. Null the first time. */
+    suspend fun known(accountId: String, folder: String, limit: Int): KnownRange? = withContext(Dispatchers.IO) {
+        val db = readableDatabase
+        val validity = db.rawQuery("SELECT validity FROM folder_sync WHERE account = ? AND folder = ?", arrayOf(accountId, folder))
+            .use { c -> if (c.moveToFirst()) c.getLong(0) else null } ?: return@withContext null
+        val uids = db.rawQuery(
+            "SELECT uid FROM messages WHERE account = ? AND folder = ? ORDER BY uid DESC LIMIT $limit",
+            arrayOf(accountId, folder),
+        ).use { c -> buildList { while (c.moveToNext()) add(c.getLong(0)) } }
+        KnownRange(validity, uids)
+    }
+
+    /** Applies what changed on the server to a folder's list, all at once. */
+    suspend fun applySync(accountId: String, folder: String, sync: FolderSync) = withContext(Dispatchers.IO) {
+        val db = writableDatabase
+        var flagChanges = 0
+        db.beginTransaction()
+        try {
+            if (sync.reset) db.delete("messages", "account = ? AND folder = ?", arrayOf(accountId, folder))
+            sync.removed.chunked(400).forEach { chunk ->
+                db.delete("messages", "account = ? AND folder = ? AND uid IN (${chunk.joinToString(",")})", arrayOf(accountId, folder))
+            }
+            sync.flags.forEach { (uid, f) ->
+                val seen = if (f.seen) 1 else 0
+                val flagged = if (f.flagged) 1 else 0
+                val answered = if (f.answered) 1 else 0
+                // Only rows whose flags really differ, so an unchanged folder changes nothing.
+                flagChanges += db.update(
+                    "messages",
+                    ContentValues().apply {
+                        put("seen", seen)
+                        put("flagged", flagged)
+                        put("answered", answered)
+                    },
+                    "account = ? AND folder = ? AND uid = ? AND (seen != ? OR flagged != ? OR answered != ?)",
+                    arrayOf(accountId, folder, uid.toString(), seen.toString(), flagged.toString(), answered.toString()),
+                )
+            }
+            sync.fresh.forEach { db.insertWithOnConflict("messages", null, values(it), SQLiteDatabase.CONFLICT_REPLACE) }
+            db.insertWithOnConflict(
+                "folder_sync",
+                null,
+                ContentValues().apply {
+                    put("account", accountId)
+                    put("folder", folder)
+                    put("validity", sync.uidValidity)
+                },
+                SQLiteDatabase.CONFLICT_REPLACE,
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        // Nothing changed (the usual case): the lists on screen don't need to read again.
+        if (sync.reset || sync.removed.isNotEmpty() || sync.fresh.isNotEmpty() || flagChanges > 0) changed()
+    }
+
     // ------------------------------------------------------------------ folders
 
     suspend fun folders(accountId: String): List<FolderInfo> = withContext(Dispatchers.IO) {
@@ -260,6 +331,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
         val db = writableDatabase
         db.delete("messages", "account = ?", arrayOf(accountId))
         db.delete("folders", "account = ?", arrayOf(accountId))
+        db.delete("folder_sync", "account = ?", arrayOf(accountId))
         changed()
     }
 
@@ -267,6 +339,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
         val db = writableDatabase
         db.delete("messages", null, null)
         db.delete("folders", null, null)
+        db.delete("folder_sync", null, null)
         changed()
     }
 }

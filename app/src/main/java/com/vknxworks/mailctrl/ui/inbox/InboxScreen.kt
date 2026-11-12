@@ -106,14 +106,17 @@ fun InboxScreen() {
     var loadingMore by remember { mutableStateOf(false) }
     val selection = remember { mutableStateListOf<String>() }
 
-    fun refresh() {
+    /** [force]: pulled down or retried. Otherwise inboxes refreshed a moment ago are left as they are. */
+    fun refresh(force: Boolean = true) {
         if (refreshing) return
+        val due = if (force) ids else ids.filterNot { c.actions.isFresh(it, MailActions.INBOX) }
+        if (due.isEmpty()) return
         refreshing = true
         scope.launch {
-            val errors = c.actions.refreshInboxes(ids)
-            problems.removeAll { it.accountId in ids }
+            val errors = c.actions.refreshInboxes(due)
+            problems.removeAll { it.accountId in due }
             errors.forEach { (id, e) -> problems += AccountProblem(id, e) }
-            ids.filter { it !in errors }.forEach { hasMore[it] = true }
+            due.filter { it !in errors }.forEach { hasMore[it] = true }
             refreshing = false
         }
     }
@@ -135,7 +138,7 @@ fun InboxScreen() {
     // running for the accounts shown before is waited for, so the ones shown now are refreshed too.
     LaunchedEffect(ids) {
         snapshotFlow { refreshing }.first { !it }
-        refresh()
+        refresh(force = false)
     }
 
     // Notifications are on from the start: Android asks once whether MailCtrl may show them.
@@ -181,7 +184,7 @@ fun InboxScreen() {
                 headers = headers.orEmpty(),
                 accountNames = names,
                 refreshing = refreshing || headers == null,
-                onRefresh = ::refresh,
+                onRefresh = { refresh() },
                 hasMore = ids.any { hasMore[it] != false },
                 loadingMore = loadingMore,
                 onLoadMore = ::loadMore,
@@ -278,8 +281,9 @@ fun FolderScreen(accountId: String, folder: String) {
     var emptying by remember { mutableStateOf(false) }
     val selection = remember { mutableStateListOf<String>() }
 
-    fun refresh() {
+    fun refresh(force: Boolean = true) {
         if (refreshing) return
+        if (!force && c.actions.isFresh(accountId, folder)) return
         refreshing = true
         scope.launch {
             problem = runCatching { c.actions.refresh(accountId, folder) }.exceptionOrNull()
@@ -299,7 +303,7 @@ fun FolderScreen(accountId: String, folder: String) {
         }
     }
 
-    LaunchedEffect(accountId, folder) { refresh() }
+    LaunchedEffect(accountId, folder) { refresh(force = false) }
 
     val f = info
     val title = f?.let { folderName(it) } ?: folder.substringAfterLast('/')
@@ -328,7 +332,7 @@ fun FolderScreen(accountId: String, folder: String) {
             headers = headers.orEmpty(),
             accountNames = null,
             refreshing = refreshing || headers == null,
-            onRefresh = ::refresh,
+            onRefresh = { refresh() },
             hasMore = hasMore,
             loadingMore = loadingMore,
             onLoadMore = ::loadMore,

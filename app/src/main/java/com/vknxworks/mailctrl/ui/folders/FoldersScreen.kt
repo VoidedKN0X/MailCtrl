@@ -84,21 +84,24 @@ fun FoldersScreen() {
     val problems = remember { mutableStateMapOf<String, String>() }
     var refreshing by remember { mutableStateOf(false) }
 
-    fun refresh() {
+    /** [force]: pulled down. Otherwise accounts whose folders were read a moment ago are left as they are. */
+    fun refresh(force: Boolean = true) {
         if (refreshing) return
+        val due = if (force) accounts else accounts.filterNot { c.actions.foldersFresh(it.id) }
+        if (due.isEmpty()) return
         refreshing = true
         scope.launch {
             coroutineScope {
-                accounts.map { a -> async { a.id to runCatching { c.actions.refreshFolders(a.id) }.exceptionOrNull() } }.awaitAll()
+                due.map { a -> async { a.id to runCatching { c.actions.refreshFolders(a.id) }.exceptionOrNull() } }.awaitAll()
             }.forEach { (id, e) -> if (e == null) problems.remove(id) else problems[id] = e.friendlyMessage() }
             refreshing = false
         }
     }
-    LaunchedEffect(accounts.map { it.id }) { refresh() }
+    LaunchedEffect(accounts.map { it.id }) { refresh(force = false) }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         TabTitle(stringResource(R.string.tab_folders))
-        PullToRefreshBox(isRefreshing = refreshing, onRefresh = ::refresh, modifier = Modifier.fillMaxSize()) {
+        PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp + LocalBottomClearance.current)) {
                 if (drafts.isNotEmpty()) {
                     Group {

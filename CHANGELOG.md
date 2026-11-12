@@ -4,6 +4,29 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.1.7 (2026-11-12)
+
+MailCtrl is much faster: lists refresh in a fraction of the time, messages open quicker, and switching tabs no longer waits for the server.
+
+### Changed
+
+- **Stays signed in between actions.** MailCtrl used to sign in to your mail server again after 45 seconds without use, so almost everything you did started with a new secure connection and sign-in. The connection is now kept for 5 minutes, so most actions go straight to the server.
+- **Refreshing only downloads what changed.** A refresh used to download the details of up to 200 messages again every time. It now asks only for new messages, plus which of the messages already on the phone were read, flagged, answered or removed. An unchanged inbox refreshes almost instantly, even on mobile data.
+- **Opening a message never waits for a refresh.** Each account now has a second connection just for what you do yourself, so a refresh running in the background no longer holds up opening, flagging or moving a message.
+- **Messages open in one go.** A message (up to about 900 KB, which is most mail) is now downloaded whole in a single request instead of part by part, including the pictures inside it. Its attachments then open without downloading again.
+- **Subject and sender show straight away** when you open a message, while the rest loads.
+- **Opening a message again is instant.** The messages you opened lately are kept in memory (never on storage) and forgotten as soon as MailCtrl locks or closes.
+- **The newest unread messages are read ahead.** After the inbox refreshes, up to 5 small unread messages are downloaded in the background so they open instantly. They stay unread, and nothing from the internet is loaded for them.
+- **Switching tabs doesn't refresh again.** Coming back to the Inbox or a folder within 30 seconds of the last refresh (2 minutes for the Folders tab) shows what's there without asking the server. Pull down to refresh at any time.
+- **Folders tab loads faster.** Unread and total counts now take one request per folder instead of two, and Gmail's All Mail (slow to count) is no longer counted.
+- **Staying in the same folder is quicker.** The folder you're working in stays open between actions, so the next message, flag or move in it needs one request fewer.
+- **The message viewer is ready sooner.** Its engine is started in the background shortly after MailCtrl opens, so the first message you open doesn't wait for it.
+
+### Fixed
+
+- **No more long hangs after switching networks.** When the phone moves between Wi-Fi and mobile data, or your VPN goes up or down, MailCtrl now drops its old connections at once instead of waiting up to a minute for them to time out.
+- **Shorter waits on a dead connection.** A server that stops answering now times out after 30 seconds instead of 60.
+
 ## v0.1.6 (2026-11-05)
 
 MailCtrl now needs Android 15 or newer.

@@ -76,6 +76,7 @@ import com.vknxworks.mailctrl.data.settings.RemoteContent
 import com.vknxworks.mailctrl.mail.Address
 import com.vknxworks.mailctrl.mail.Attachment
 import com.vknxworks.mailctrl.mail.MessageBody
+import com.vknxworks.mailctrl.mail.MessageHeader
 import com.vknxworks.mailctrl.ui.components.ActionSheet
 import com.vknxworks.mailctrl.ui.components.Avatar
 import com.vknxworks.mailctrl.ui.components.ConfirmDialog
@@ -109,7 +110,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private sealed interface Loaded {
-    data object Loading : Loaded
+    /** [preview]: the message as it is in the list on the phone, shown while the rest downloads. */
+    data class Loading(val preview: MessageHeader? = null) : Loaded
     data class Ready(val body: MessageBody) : Loaded
     data class Failed(val message: String) : Loaded
 }
@@ -123,7 +125,7 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
     val scope = rememberCoroutineScope()
     val settings by c.settings.settings.collectAsStateWithLifecycle()
     var attempt by remember { mutableIntStateOf(0) }
-    var state by remember { mutableStateOf<Loaded>(Loaded.Loading) }
+    var state by remember { mutableStateOf<Loaded>(Loaded.Loading()) }
     var remote by remember { mutableStateOf(false) }
     var linkToOpen by remember { mutableStateOf<String?>(null) }
     var more by remember { mutableStateOf(false) }
@@ -132,7 +134,7 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
     var details by remember { mutableStateOf(false) }
 
     LaunchedEffect(accountId, folder, uid, attempt) {
-        state = Loaded.Loading
+        state = Loaded.Loading(c.cache.header(accountId, folder, uid))
         state = try {
             // The saved settings, not the placeholder ones a message opened right at start-up would see.
             val saved = c.settings.current()
@@ -185,7 +187,7 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
             }
         }
         when (val s = state) {
-            Loaded.Loading -> LoadingView()
+            is Loaded.Loading -> if (s.preview != null) MessagePreview(s.preview) else LoadingView()
             is Loaded.Failed -> ErrorView(s.message, onRetry = { attempt++ })
             is Loaded.Ready -> MessageContent(
                 s.body,
@@ -280,6 +282,33 @@ private fun LinkDialog(url: String, onDismiss: () -> Unit, onOpen: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** Subject and sender straight away, from the list on the phone, while the message itself downloads. */
+@Composable
+private fun MessagePreview(h: MessageHeader) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            h.subject.ifBlank { stringResource(R.string.no_subject) },
+            style = MaterialTheme.typography.headlineSmall,
+            color = CtrlColors.Text,
+            modifier = Modifier.padding(start = Gutter, end = Gutter, top = 4.dp, bottom = 14.dp),
+        )
+        Row(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            val from = h.from
+            Avatar(from?.display ?: "?", from?.email ?: "?", size = 42.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(from?.display ?: stringResource(R.string.unknown_sender), style = MaterialTheme.typography.titleSmall, color = CtrlColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(from?.email.orEmpty(), style = CtrlType.Meta, color = CtrlColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text(fullTime(context, h.date), style = CtrlType.Status, color = CtrlColors.Inactive, maxLines = 2, modifier = Modifier.padding(start = 8.dp).width(110.dp))
+        }
+        Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp, color = CtrlColors.AccentText)
+        }
+    }
 }
 
 @Composable
