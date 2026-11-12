@@ -239,6 +239,7 @@ Native Android apps for self-hosted services and everyday tools, all with the sa
 | [ImmichCtrl](https://github.com/VoidedKN0X/ImmichCtrl) | Photos and backup for your Immich server |
 | [JellyCtrl](https://github.com/VoidedKN0X/JellyCtrl) | Movies, shows, music and Live TV from Jellyfin |
 | [LijnCtrl](https://github.com/VoidedKN0X/LijnCtrl) | Live De Lijn bus and tram departures |
+| [LumenCtrl](https://github.com/VoidedKN0X/LumenCtrl) | Private, offline photo and video editor |
 | **MailCtrl** (this app) | Email for Gmail and Proton Mail |
 | [MemoCtrl](https://github.com/VoidedKN0X/MemoCtrl) | Notes on your Memos server |
 | [NaviCtrl](https://github.com/VoidedKN0X/NaviCtrl) | Music player for Navidrome servers |
