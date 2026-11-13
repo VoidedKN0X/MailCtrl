@@ -4,6 +4,18 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.1.9 (2026-11-13)
+
+### Security
+
+- **Passwords and drafts can use the phone's security chip.** On a new install, the key that encrypts your passwords and drafts is made in the phone's separate security chip (StrongBox) when it has one, and in its regular secure hardware otherwise. If you already use MailCtrl, your existing key stays where it is and nothing changes for you.
+- **Wake-ups from ntfy are checked more strictly.** The secret that proves a wake-up really comes from ntfy is now compared in a way that gives nothing away about it, however many fake wake-ups another app sends.
+- **The build tool download is checked.** The exact Gradle version used to build MailCtrl is now verified against its published checksum before it's used.
+
+### Performance
+
+- **Starts a little lighter.** The message cache, drafts and the mail connection are only opened when they're first needed, instead of all at once when MailCtrl starts (for example for a background check).
+
 ## v0.1.8 (2026-11-12)
 
 ### Changed

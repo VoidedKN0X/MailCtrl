@@ -22,7 +22,9 @@ import kotlinx.coroutines.launch
 class PushReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val token = intent.getStringExtra(UnifiedPush.EXTRA_TOKEN) ?: return
-        if (token != UnifiedPush.token(context)) return
+        val own = UnifiedPush.token(context) ?: return
+        // Compared in constant time, so the token can't be guessed a character at a time.
+        if (!java.security.MessageDigest.isEqual(token.toByteArray(), own.toByteArray())) return
         // Only rejects senders that identify as another app; anonymous ones get through to the token check.
         val sender = sentFromPackage
         if (sender != null && sender != UnifiedPush.NTFY) return

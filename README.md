@@ -184,7 +184,8 @@ Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORT
 **Telemetry-free.** MailCtrl has no analytics, crash reporting, usage stats or tracking of any kind.
 
 - **Only your own servers.** MailCtrl connects to the IMAP and SMTP servers of your accounts and nothing else (and, when you test it, your own ntfy address). There's no MailCtrl server, and no online look-up of server settings: known providers are a list inside the app.
-- **Passwords** are encrypted with a key in the phone's secure hardware and only ever sent to your own mail servers. They're never shown again after you save them.
+- **Passwords** are encrypted with a key in the phone's secure hardware (its separate security chip, StrongBox, when the phone has one) and only ever sent to your own mail servers. They're never shown again after you save them.
+- **Gmail** goes through Google's standard mail servers only (imap.gmail.com and smtp.gmail.com) with an app password: no Google app, library or sign-in service is built in.
 - **Encrypted connections** (SSL/TLS or STARTTLS) are checked like a browser does. A server whose certificate the phone doesn't trust is refused unless you trust that exact certificate yourself. STARTTLS is required, never optional: a server that suddenly stops offering it is refused rather than used unencrypted. "None" is only for servers on your own network or over a VPN.
 - **No tracking pixels:** pictures from the internet stay blocked unless you load them, and the message viewer never looks links up online.
 - **The phone's name stays private:** MailCtrl greets mail servers with a neutral address instead of your phone's name, makes Message-IDs without the app's name in them, and adds no "sent with" header.

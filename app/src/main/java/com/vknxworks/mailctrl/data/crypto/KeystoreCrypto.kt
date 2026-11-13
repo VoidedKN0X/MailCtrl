@@ -21,6 +21,12 @@ object KeystoreCrypto {
     private fun key(): SecretKey {
         val ks = KeyStore.getInstance(PROVIDER).apply { load(null) }
         (ks.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        // A new key goes into the phone's separate security chip (StrongBox) when it has one, otherwise into the
+        // regular secure hardware. A key made before stays where it is, so nothing has to be encrypted again.
+        return runCatching { generate(strongBox = true) }.getOrElse { generate(strongBox = false) }
+    }
+
+    private fun generate(strongBox: Boolean): SecretKey {
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, PROVIDER)
         gen.init(
             KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
@@ -28,6 +34,7 @@ object KeystoreCrypto {
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
                 .setKeySize(256)
+                .setIsStrongBoxBacked(strongBox)
                 .build()
         )
         return gen.generateKey()

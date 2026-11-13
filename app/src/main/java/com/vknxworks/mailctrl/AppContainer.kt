@@ -50,10 +50,11 @@ class AppContainer(val context: Context) {
     /** The app lock's PIN, fingerprint key and the key that seals drafts (and passwords) while locked. */
     val vault = LockVault(context, "mailctrl")
     val accounts = AccountStore(context, vault)
-    val cache = MailCache(context)
-    val mail = MailClient(context, accounts)
-    val actions = MailActions(mail, cache, accounts, appScope)
-    val drafts = DraftStore(context, vault)
+    // Made when first needed, so starting the app (or a background check) doesn't open what it won't use.
+    val cache by lazy { MailCache(context) }
+    val mail by lazy { MailClient(context, accounts) }
+    val actions by lazy { MailActions(mail, cache, accounts, appScope) }
+    val drafts by lazy { DraftStore(context, vault) }
     val notifier = Notifier(context)
 
     /** Set by MainActivity for notifications, mailto: links and shares; the main screen consumes it. */
