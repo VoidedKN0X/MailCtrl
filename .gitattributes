@@ -1,4 +1,4 @@
-# Shell scripts and the Gradle wrapper run on the Linux build machines: always LF.
-*.sh text eol=lf
-gradlew text eol=lf
+# Text files are stored with LF line endings in the repository, whatever the OS of the checkout.
+* text=auto eol=lf
 *.bat text eol=crlf
+*.cmd text eol=crlf
