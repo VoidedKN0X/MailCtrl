@@ -22,8 +22,8 @@ android {
         minSdk = 35
         targetSdk = 36
         // Bump both to publish a new release (see CHANGELOG.md).
-        versionCode = 10
-        versionName = "0.1.9"
+        versionCode = 11
+        versionName = "0.2.0"
         // 64-bit ARM phones only (arm64-v8a), like every Ctrl app.
         ndk { abiFilters += listOf("arm64-v8a") }
     }
@@ -77,6 +77,8 @@ android {
 
     packaging {
         resources.excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/INDEX.LIST", "/META-INF/LICENSE.md", "/META-INF/NOTICE.md", "/META-INF/LICENSE.txt", "/META-INF/NOTICE.txt")
+        // Bouncy Castle's OSGi manifests (desktop Java only). Its licence is in assets/licenses instead.
+        resources.excludes += listOf("/META-INF/versions/9/OSGI-INF/MANIFEST.MF")
     }
 
     lint {
@@ -86,8 +88,10 @@ android {
 }
 
 kotlin {
-    jvmToolchain(17)
+    // Java 17 bytecode from any JDK 17+ (like the other Ctrl apps), so unit tests also run where only a newer
+    // JDK is installed; no toolchain lookup or download.
     compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         optIn.addAll(
             "androidx.compose.material3.ExperimentalMaterial3Api",
             "androidx.compose.foundation.ExperimentalFoundationApi",
@@ -125,4 +129,9 @@ dependencies {
     implementation(libs.android.activation)
     // Background checks for new mail, and wake-ups from ntfy.
     implementation(libs.androidx.work.runtime)
+    // OpenPGP (encrypting, signing, keys): Bouncy Castle's lightweight API, MIT-style licence, from Maven Central.
+    implementation(libs.bouncycastle.pg)
+    implementation(libs.bouncycastle.prov)
+
+    testImplementation(libs.junit)
 }

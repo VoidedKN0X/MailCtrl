@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AllInbox
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,12 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vknxworks.mailctrl.PendingAction
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.data.accounts.Account
@@ -81,6 +84,11 @@ fun FoldersScreen() {
     val folders by produceState<Map<String, List<FolderInfo>>>(emptyMap(), version, accounts) {
         value = accounts.associate { it.id to c.cache.folders(it.id) }
     }
+    val settings by c.settings.settings.collectAsStateWithLifecycle()
+    // Unread in "All inboxes": only the accounts that are in it (each account's own setting).
+    val allUnread by produceState(0, version, accounts) {
+        value = c.cache.inboxUnread(accounts.filter { it.unified }.ifEmpty { accounts }.map { it.id })
+    }
     val problems = remember { mutableStateMapOf<String, String>() }
     var refreshing by remember { mutableStateOf(false) }
 
@@ -103,6 +111,20 @@ fun FoldersScreen() {
         TabTitle(stringResource(R.string.tab_folders))
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp + LocalBottomClearance.current)) {
+                if (settings.unifiedInbox && accounts.size > 1) {
+                    Group {
+                        GroupRow(
+                            stringResource(R.string.all_inboxes),
+                            if (allUnread > 0) pluralStringResource(R.plurals.all_inboxes_unread, allUnread, allUnread) else stringResource(R.string.all_inboxes_subtitle),
+                            icon = Icons.Outlined.AllInbox,
+                            showChevron = true,
+                            onClick = {
+                                c.showAllInboxes.value = true
+                                c.pendingAction.value = PendingAction.OpenInbox
+                            },
+                        )
+                    }
+                }
                 if (drafts.isNotEmpty()) {
                     Group {
                         GroupRow(

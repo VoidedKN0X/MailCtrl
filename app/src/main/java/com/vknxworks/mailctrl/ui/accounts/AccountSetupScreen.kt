@@ -21,8 +21,31 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AllInbox
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.vknxworks.mailctrl.ui.components.GroupChoice
+import com.vknxworks.mailctrl.ui.components.GroupRow
+import com.vknxworks.mailctrl.ui.components.accountColor
+import com.vknxworks.mailctrl.ui.components.accountPalette
+import com.vknxworks.mailctrl.ui.nav.PgpGenerateRoute
+import com.vknxworks.mailctrl.ui.nav.PgpKeysRoute
+import com.vknxworks.mailctrl.ui.pgp.shortFingerprint
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -119,6 +142,14 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
     var smtpSec by rememberSaveable { mutableStateOf(existing?.smtp?.security ?: Security.SSL) }
     var smtpUser by rememberSaveable { mutableStateOf(existing?.smtp?.username.orEmpty()) }
     var trusted by remember { mutableStateOf(existing?.trustedCerts.orEmpty()) }
+    var pgpKey by rememberSaveable { mutableStateOf(existing?.pgpKey) }
+    var autocrypt by rememberSaveable { mutableStateOf(existing?.autocrypt ?: false) }
+    var color by rememberSaveable { mutableIntStateOf(existing?.color ?: -1) }
+    var unified by rememberSaveable { mutableStateOf(existing?.unified ?: true) }
+    val pgpKeys by c.pgpKeys.keys.collectAsStateWithLifecycle()
+    LaunchedEffect(editing) { if (editing) c.pgpKeys.load() }
+    // A key made or picked on the key screens meanwhile shows here (and isn't undone by saving).
+    LaunchedEffect(existing?.pgpKey) { pgpKey = existing?.pgpKey }
 
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -156,6 +187,10 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
             imap = ServerConfig(imapHost.trim(), ip, imapSec, imapUser.trim().ifBlank { email.trim() }),
             smtp = ServerConfig(smtpHost.trim(), sp, smtpSec, smtpUser.trim().ifBlank { email.trim() }),
             trustedCerts = trusted,
+            pgpKey = pgpKey,
+            autocrypt = autocrypt,
+            color = color,
+            unified = unified,
         )
     }
 
@@ -315,6 +350,37 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
                     colors = ctrlFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // How the account looks in lists, and whether it's in "All inboxes".
+                Group(stringResource(R.string.setup_in_lists), padded = false) {
+                    AccountColorRow(color, autoColor = accountColor(existing!!.copy(color = -1))) { color = it }
+                    if (accounts.size > 1) {
+                        GroupSwitch(stringResource(R.string.setup_unified), stringResource(R.string.setup_unified_subtitle), unified, icon = Icons.Outlined.AllInbox) { unified = it }
+                    }
+                }
+                // OpenPGP: the key this account signs with (and is encrypted to), and Autocrypt.
+                val ownKeys = pgpKeys.filter { it.info.secret }
+                Group(stringResource(R.string.group_pgp), padded = false, footer = stringResource(R.string.setup_autocrypt_footer)) {
+                    GroupChoice(
+                        stringResource(R.string.setup_pgp_key),
+                        listOf<Pair<String?, String>>(null to stringResource(R.string.setup_pgp_none)) +
+                            ownKeys.map { it.info.fingerprint to it.info.primaryUserId + "  ·  " + shortFingerprint(it.info.fingerprint) },
+                        pgpKey,
+                        icon = Icons.Outlined.VpnKey,
+                    ) { pgpKey = it }
+                    GroupSwitch(
+                        stringResource(R.string.setup_autocrypt),
+                        stringResource(R.string.setup_autocrypt_subtitle),
+                        autocrypt && pgpKey != null,
+                        icon = Icons.Outlined.Share,
+                        enabled = pgpKey != null,
+                    ) { autocrypt = it }
+                    GroupRow(
+                        stringResource(if (ownKeys.isEmpty()) R.string.pgp_generate else R.string.pgp_keys),
+                        icon = if (ownKeys.isEmpty()) Icons.Outlined.Add else Icons.Outlined.Key,
+                        showChevron = true,
+                        onClick = { nav?.navigate(if (ownKeys.isEmpty()) PgpGenerateRoute(existing!!.id) else PgpKeysRoute) },
+                    )
+                }
             }
 
             error?.let { Note(Icons.Outlined.WarningAmber, it, warning = true) }
@@ -393,6 +459,41 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
                 c.accounts.remove(id)
                 c.settings.update { if (it.defaultAccount == id) it.copy(defaultAccount = "") else it }
             }
+        }
+    }
+}
+
+/** The account's colour: "automatic" (picked from the account) or one of the account colours. */
+@Composable
+private fun AccountColorRow(selected: Int, autoColor: Color, onPick: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(stringResource(R.string.setup_color), style = MaterialTheme.typography.bodyLarge, color = CtrlColors.Text)
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Swatch(autoColor, selected !in accountPalette.indices, stringResource(R.string.setup_color_auto), auto = true) { onPick(-1) }
+            accountPalette.forEachIndexed { i, col ->
+                Swatch(col, selected == i, stringResource(R.string.setup_color_n, i + 1)) { onPick(i) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Swatch(color: Color, selected: Boolean, description: String, auto: Boolean = false, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        Modifier
+            .size(38.dp)
+            .clip(shape)
+            .background(color)
+            .border(if (selected) 2.dp else 0.dp, if (selected) CtrlColors.Text else Color.Transparent, shape)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            selected -> Icon(Icons.Outlined.Check, null, Modifier.size(20.dp), tint = Color.Black)
+            auto -> Text("A", style = CtrlType.Status, color = Color.Black)
         }
     }
 }

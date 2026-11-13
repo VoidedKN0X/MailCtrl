@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import com.vknxworks.mailctrl.MainActivity
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.data.accounts.Account
+import com.vknxworks.mailctrl.data.accounts.AccountColors
 import com.vknxworks.mailctrl.data.settings.NotificationContent
 import com.vknxworks.mailctrl.mail.MessageHeader
 import java.security.MessageDigest
@@ -97,6 +98,8 @@ class Notifier(private val context: Context) {
             .setColor(color())
             .setContentTitle(context.getString(R.string.notify_new_mail))
             .build()
+        // With several accounts, each one's notifications carry its colour (and name), as in "All inboxes".
+        val tint = if (multipleAccounts) AccountColors.of(account) else color()
         fresh.forEach { h ->
             val id = idFor(h)
             val sender = h.from?.display ?: context.getString(R.string.unknown_sender)
@@ -108,7 +111,7 @@ class Notifier(private val context: Context) {
             }
             val b = Notification.Builder(context, CH_MAIL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setColor(color())
+                .setColor(tint)
                 .setContentTitle(title)
                 .setWhen(h.date)
                 .setShowWhen(true)
@@ -131,7 +134,7 @@ class Notifier(private val context: Context) {
         }
         val summary = Notification.Builder(context, CH_MAIL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setColor(color())
+            .setColor(tint)
             .setContentTitle(context.getString(R.string.notify_new_mail))
             .setSubText(account.title.takeIf { multipleAccounts && content != NotificationContent.NOTHING })
             .setGroup(groupKey(account.id))

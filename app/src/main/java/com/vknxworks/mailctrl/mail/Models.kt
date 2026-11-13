@@ -99,7 +99,39 @@ data class MessageBody(
     val hasRemoteContent: Boolean,
     /** "List-Unsubscribe" link, if there is one (shown, never followed by itself). */
     val unsubscribe: String?,
+    /** OpenPGP content still to decrypt or check, if the message has any. */
+    val pgp: PgpPayload? = null,
+    /** The sender's "Autocrypt" header (their public key), if there is one. */
+    val autocrypt: String? = null,
+    /** This is the decrypted content of an encrypted message (it's kept in memory only). */
+    val decrypted: Boolean = false,
 )
+
+/** OpenPGP in a received message, as found when it was opened. */
+sealed interface PgpPayload {
+    /** Bytes kept, for memory accounting. */
+    val size: Int
+
+    /** PGP/MIME encrypted (RFC 3156): the encrypted message. */
+    class Encrypted(val data: ByteArray) : PgpPayload {
+        override val size get() = data.size
+    }
+
+    /** PGP/MIME signed: the first part exactly as signed, and the signature. */
+    class Signed(val content: ByteArray, val signature: ByteArray) : PgpPayload {
+        override val size get() = content.size + signature.size
+    }
+
+    /** An encrypted block ("-----BEGIN PGP MESSAGE-----") in the plain text. */
+    class InlineEncrypted(val text: String) : PgpPayload {
+        override val size get() = text.length
+    }
+
+    /** A cleartext-signed text ("-----BEGIN PGP SIGNED MESSAGE-----"), in its own character set. */
+    class InlineSigned(val text: String, val charset: String) : PgpPayload {
+        override val size get() = text.length
+    }
+}
 
 /** Something to send. */
 data class OutgoingMessage(
@@ -112,6 +144,10 @@ data class OutgoingMessage(
     /** The message this answers (Message-ID), for threading in the other person's mail app. */
     val inReplyTo: String? = null,
     val references: String? = null,
+    /** Encrypt and/or sign with OpenPGP (PGP/MIME). */
+    val pgp: com.vknxworks.mailctrl.pgp.PgpOutgoing? = null,
+    /** "Autocrypt" header value with your public key, when the account sends it. */
+    val autocrypt: String? = null,
 )
 
 data class OutgoingAttachment(val name: String, val mimeType: String, val bytes: ByteArray)

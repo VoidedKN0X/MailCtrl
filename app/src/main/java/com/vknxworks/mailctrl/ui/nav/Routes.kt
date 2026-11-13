@@ -39,5 +39,14 @@ object ComposeMode {
 @Serializable data object SettingsRoute
 @Serializable data object NotificationsRoute
 
+/** Your OpenPGP keys and your contacts' public keys. */
+@Serializable data object PgpKeysRoute
+
+/** One OpenPGP key. */
+@Serializable data class PgpKeyRoute(val fingerprint: String)
+
+/** Making a new OpenPGP key, for [accountId] when given. */
+@Serializable data class PgpGenerateRoute(val accountId: String? = null)
+
 /** Adding an account, or changing one ([accountId]). */
 @Serializable data class AccountSetupRoute(val accountId: String? = null)

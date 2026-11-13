@@ -45,6 +45,18 @@ enum class RemoteContent(@StringRes val label: Int) {
     ALWAYS(R.string.remote_always),
 }
 
+/** How long an OpenPGP key's passphrase is remembered (in memory only) after you type it. */
+enum class PassphraseMemory(@StringRes val label: Int, val millis: Long) {
+    /** Asked for every message you open or send. */
+    NEVER(R.string.pgp_remember_never, 0L),
+    MINUTE_1(R.string.pgp_remember_1m, 60_000L),
+    MINUTES_5(R.string.pgp_remember_5m, 5 * 60_000L),
+    MINUTES_15(R.string.pgp_remember_15m, 15 * 60_000L),
+    HOUR_1(R.string.pgp_remember_1h, 60 * 60_000L),
+    /** Until MailCtrl locks or closes. */
+    UNTIL_LOCKED(R.string.pgp_remember_lock, -1L),
+}
+
 /** What swiping a message in a list does. */
 enum class SwipeAction(@StringRes val label: Int) {
     NONE(R.string.swipe_none),
@@ -83,6 +95,10 @@ data class AppSettings(
     val confirmDelete: Boolean = false,
     /** The account new messages are written from (id), or empty for the first one. */
     val defaultAccount: String = "",
+    /** How long a key passphrase is remembered. */
+    val pgpPassphrase: PassphraseMemory = PassphraseMemory.MINUTES_5,
+    /** "Look up key" (Web Key Directory) is offered; it asks the recipient's domain, only when you tap it. */
+    val wkdLookup: Boolean = true,
 ) {
     /** The notification content in effect: the user's own choice, or the default for the app lock's state. */
     fun notificationContentFor(lockOn: Boolean): NotificationContent =
@@ -108,6 +124,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val swipeLeft = stringPreferencesKey("swipe_left")
         val confirmDelete = booleanPreferencesKey("confirm_delete")
         val defaultAccount = stringPreferencesKey("default_account")
+        val pgpPassphrase = stringPreferencesKey("pgp_passphrase")
+        val wkdLookup = booleanPreferencesKey("wkd_lookup")
     }
 
     val settings: StateFlow<AppSettings> = context.appDataStore.data
@@ -136,6 +154,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         swipeLeft = enumOr(this[K.swipeLeft], SwipeAction.ARCHIVE),
         confirmDelete = this[K.confirmDelete] ?: false,
         defaultAccount = this[K.defaultAccount] ?: "",
+        pgpPassphrase = enumOr(this[K.pgpPassphrase], PassphraseMemory.MINUTES_5),
+        wkdLookup = this[K.wkdLookup] ?: true,
     )
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
@@ -159,6 +179,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             p[K.swipeLeft] = s.swipeLeft.name
             p[K.confirmDelete] = s.confirmDelete
             p[K.defaultAccount] = s.defaultAccount
+            p[K.pgpPassphrase] = s.pgpPassphrase.name
+            p[K.wkdLookup] = s.wkdLookup
         }
     }
 

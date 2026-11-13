@@ -9,6 +9,9 @@ import com.vknxworks.mailctrl.data.cache.MailCache
 import com.vknxworks.mailctrl.data.drafts.Draft
 import com.vknxworks.mailctrl.data.drafts.DraftStore
 import com.vknxworks.mailctrl.data.lock.LockVault
+import com.vknxworks.mailctrl.data.pgp.PgpKeyStore
+import com.vknxworks.mailctrl.data.pgp.PgpService
+import com.vknxworks.mailctrl.pgp.UnlockedKey
 import com.vknxworks.mailctrl.data.settings.SettingsRepository
 import com.vknxworks.mailctrl.mail.MailClient
 import com.vknxworks.mailctrl.mail.MessageBody
@@ -56,9 +59,16 @@ class AppContainer(val context: Context) {
     val actions by lazy { MailActions(mail, cache, accounts, appScope) }
     val drafts by lazy { DraftStore(context, vault) }
     val notifier = Notifier(context)
+    /** OpenPGP keys (yours and your contacts'), read from storage in the background the first time they're needed. */
+    val pgpKeys by lazy { PgpKeyStore(context).also { store -> appScope.launch { runCatching { store.load() } } } }
+    private val pgpService = lazy { PgpService(pgpKeys, settings) { mail } }
+    val pgp by pgpService
 
     /** Set by MainActivity for notifications, mailto: links and shares; the main screen consumes it. */
     val pendingAction = MutableStateFlow<PendingAction?>(null)
+
+    /** Set by "All inboxes" in the Folders tab: the Inbox tab switches to it. */
+    val showAllInboxes = MutableStateFlow(false)
 
     /** What to put in the next Compose screen that opens (a share, a mailto: link). */
     val composeRequest = MutableStateFlow<PendingAction.Compose?>(null)
@@ -111,6 +121,8 @@ class AppContainer(val context: Context) {
     fun onLocked() {
         vault.close()
         lastOpened = null
+        // OpenPGP passphrases are never remembered past the lock.
+        if (pgpService.isInitialized()) pgp.forget()
         // Messages kept in memory to open quickly are forgotten while locked.
         mail.forgetBodies()
         if (accounts.anySealed()) mail.closeAll()
@@ -125,11 +137,20 @@ class AppContainer(val context: Context) {
      * Sends a message in the background, so leaving the screen doesn't stop it. Until it's gone it stays a draft;
      * if it fails, the draft is kept and you're told why.
      */
-    fun send(draft: Draft, attachments: suspend () -> List<OutgoingAttachment>, onDone: (Boolean) -> Unit = {}) {
+    fun send(
+        draft: Draft,
+        attachments: suspend () -> List<OutgoingAttachment>,
+        /** Your OpenPGP key, opened just now to sign this message (when its passphrase isn't remembered). */
+        signer: UnlockedKey? = null,
+        onDone: (Boolean) -> Unit = {},
+    ) {
         appScope.launch {
             val account = accounts.get(draft.accountId)
             val ok = try {
                 if (account == null) throw IllegalStateException(str(R.string.error_no_account))
+                if (draft.encrypt || draft.sign || account.autocrypt) pgpKeys.load()
+                // Checked before the attachments are read: a missing key stops it straight away.
+                val protection = pgp.outgoing(account, draft, signer)
                 val files = attachments()
                 val savedSent = mail.send(
                     draft.accountId,
@@ -142,6 +163,8 @@ class AppContainer(val context: Context) {
                         attachments = files,
                         inReplyTo = draft.inReplyTo,
                         references = draft.references,
+                        pgp = protection,
+                        autocrypt = pgp.autocryptHeader(account),
                     ),
                 )
                 drafts.delete(draft.id)

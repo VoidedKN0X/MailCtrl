@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Report
@@ -72,7 +73,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.container
+import com.vknxworks.mailctrl.data.pgp.KeyOffer
+import com.vknxworks.mailctrl.data.pgp.PgpView
 import com.vknxworks.mailctrl.data.settings.RemoteContent
+import com.vknxworks.mailctrl.pgp.KeyInfo
+import com.vknxworks.mailctrl.pgp.PgpEngine
+import com.vknxworks.mailctrl.pgp.PgpFailure
+import com.vknxworks.mailctrl.pgp.UnlockedKey
+import com.vknxworks.mailctrl.ui.pgp.KeyImportDialog
+import com.vknxworks.mailctrl.ui.pgp.PassphraseDialog
+import com.vknxworks.mailctrl.ui.pgp.WkdLookup
+import org.bouncycastle.openpgp.PGPKeyRing
 import com.vknxworks.mailctrl.mail.Address
 import com.vknxworks.mailctrl.mail.Attachment
 import com.vknxworks.mailctrl.mail.MessageBody
@@ -132,6 +143,17 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
     var moving by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
+    // OpenPGP: what decrypting and checking found, a key in the message to import, and the dialogs for them.
+    var pgpView by remember { mutableStateOf<PgpView?>(null) }
+    var pgpBusy by remember { mutableStateOf(false) }
+    var pgpRun by remember { mutableIntStateOf(0) }
+    var offer by remember { mutableStateOf<KeyOffer?>(null) }
+    var unlocking by remember { mutableStateOf<KeyInfo?>(null) }
+    // A key opened for this message: kept while it's open, even when passphrases aren't remembered.
+    var openedKey by remember { mutableStateOf<UnlockedKey?>(null) }
+    var importRings by remember { mutableStateOf<List<PGPKeyRing>?>(null) }
+    var importReplaces by remember { mutableStateOf(false) }
+    var wkdEmail by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(accountId, folder, uid, attempt) {
         state = Loaded.Loading(c.cache.header(accountId, folder, uid))
@@ -154,6 +176,25 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
     val body = (state as? Loaded.Ready)?.body
     val h = body?.header
     val canArchive = c.actions.canArchive(accountId, folder)
+
+    // Decrypts and checks signatures once the message is there, and again after a key was unlocked or imported.
+    LaunchedEffect(h?.key, pgpRun) {
+        val b = (state as? Loaded.Ready)?.body ?: return@LaunchedEffect
+        if (b.pgp != null) {
+            pgpBusy = true
+            try {
+                val v = c.pgp.read(b, openedKey)
+                pgpView = v
+                // Answering or forwarding quotes the decrypted text.
+                if (v.body.decrypted) c.lastOpened = v.body
+            } finally {
+                pgpBusy = false
+            }
+        } else {
+            pgpView = null
+        }
+        offer = if (b.autocrypt != null) c.pgp.autocryptOffer(b) else null
+    }
 
     fun leave() = nav.close(MessageRoute::class)
 
@@ -189,17 +230,54 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
         when (val s = state) {
             is Loaded.Loading -> if (s.preview != null) MessagePreview(s.preview) else LoadingView()
             is Loaded.Failed -> ErrorView(s.message, onRetry = { attempt++ })
-            is Loaded.Ready -> MessageContent(
-                s.body,
-                remote = remote,
-                showDetails = details,
-                onToggleDetails = { details = !details },
-                onLoadRemote = { remote = true },
-                onLink = { url -> linkToOpen = url },
-                onReply = { mode -> nav.compose(ComposeRoute(mode = mode, accountId = accountId, folder = folder, uid = uid)) },
-            )
+            is Loaded.Ready -> {
+                // The decrypted content, with the flags as they are now.
+                val view = pgpView
+                val shown = view?.body?.let { v -> v.copy(header = s.body.header.copy(subject = v.header.subject)) } ?: s.body
+                MessageContent(
+                    shown,
+                    remote = remote,
+                    showDetails = details,
+                    onToggleDetails = { details = !details },
+                    onLoadRemote = { remote = true },
+                    onLink = { url -> linkToOpen = url },
+                    onReply = { mode -> nav.compose(ComposeRoute(mode = mode, accountId = accountId, folder = folder, uid = uid)) },
+                    onKeys = { rings ->
+                        importReplaces = false
+                        importRings = rings
+                    },
+                ) {
+                    if (pgpBusy && view == null) PgpWorking()
+                    if (view != null) {
+                        PgpBanners(
+                            view,
+                            s.body.header.from,
+                            onUnlock = { unlocking = view.locked },
+                            onLookup = s.body.header.from?.email?.takeIf { settings.wkdLookup }?.let { email -> { wkdEmail = email } },
+                        )
+                    }
+                    offer?.let { o ->
+                        KeyOfferBanner(o) {
+                            importReplaces = o.replaces
+                            importRings = listOf(o.ring)
+                        }
+                    }
+                }
+            }
         }
     }
+
+    unlocking?.let { info ->
+        PassphraseDialog(info, onDismiss = { unlocking = null }) { key ->
+            unlocking = null
+            openedKey = key
+            pgpRun++
+        }
+    }
+    importRings?.let { rings ->
+        KeyImportDialog(rings, onDismiss = { importRings = null }, replaces = importReplaces) { pgpRun++ }
+    }
+    wkdEmail?.let { email -> WkdLookup(email, onDismiss = { wkdEmail = null }) { pgpRun++ } }
 
     if (more && h != null && body != null) {
         val hasJunk = c.accounts.get(accountId)?.junkFolder.let { it != null && it != folder }
@@ -320,6 +398,9 @@ private fun MessageContent(
     onLoadRemote: () -> Unit,
     onLink: (String) -> Unit,
     onReply: (String) -> Unit,
+    onKeys: (List<PGPKeyRing>) -> Unit,
+    /** OpenPGP status lines, under the sender. */
+    pgp: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val h = body.header
@@ -362,6 +443,7 @@ private fun MessageContent(
             )
         }
         Spacer(Modifier.height(12.dp))
+        pgp()
 
         if (body.hasRemoteContent && !remote) {
             Row(
@@ -410,7 +492,7 @@ private fun MessageContent(
             Spacer(Modifier.height(16.dp))
             Column(Modifier.padding(horizontal = Gutter), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.vknxworks.mailctrl.ui.components.SectionLabel(context.resources.getQuantityString(R.plurals.attachments_n, files.size, files.size))
-                files.forEach { AttachmentRow(h.accountId, h.folder, h.uid, it) }
+                files.forEach { AttachmentRow(h.accountId, h.folder, h.uid, it, onKeys) }
             }
         }
 
@@ -476,7 +558,7 @@ private fun linkified(text: String, color: androidx.compose.ui.graphics.Color, o
 
 /** An attachment: tap opens it in another app; share or save it with the buttons. */
 @Composable
-private fun AttachmentRow(accountId: String, folder: String, uid: Long, att: Attachment) {
+private fun AttachmentRow(accountId: String, folder: String, uid: Long, att: Attachment, onKeys: (List<PGPKeyRing>) -> Unit) {
     val context = LocalContext.current
     val c = context.container
     val scope = rememberCoroutineScope()
@@ -520,6 +602,29 @@ private fun AttachmentRow(accountId: String, folder: String, uid: Long, att: Att
         Column(Modifier.weight(1f)) {
             Text(att.name, style = MaterialTheme.typography.bodyMedium, color = CtrlColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(listOf(att.mimeType, attachmentSize(att.size)).filter { it.isNotBlank() }.joinToString(" · "), style = CtrlType.Meta, color = CtrlColors.Muted, maxLines = 1)
+        }
+        if (looksLikeKey(att.name, att.mimeType)) {
+            IconButton(onClick = {
+                withFile { f ->
+                    scope.launch {
+                        try {
+                            val bytes = withContext(Dispatchers.IO) {
+                                if (f.length() > PgpEngine.MAX_KEY_BYTES) throw PgpFailure(PgpFailure.Kind.TOO_BIG)
+                                f.readBytes()
+                            }
+                            onKeys(c.pgp.preview(bytes))
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: PgpFailure) {
+                            Toast.makeText(context, context.getString(R.string.pgp_no_key_in_file), Toast.LENGTH_LONG).show()
+                        } finally {
+                            withContext(Dispatchers.IO) { runCatching { f.parentFile?.deleteRecursively() } }
+                        }
+                    }
+                }
+            }) {
+                Icon(Icons.Outlined.Key, stringResource(R.string.pgp_import_key), tint = CtrlColors.AccentText)
+            }
         }
         IconButton(onClick = { withFile { shareFile(context, it, att.mimeType) } }) {
             Icon(Icons.Outlined.Share, stringResource(R.string.share), tint = CtrlColors.Muted)

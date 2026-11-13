@@ -29,6 +29,10 @@ data class Draft(
     /** The message answered, to mark it answered when this is sent. */
     val replyFolder: String? = null,
     val replyUid: Long? = null,
+    /** Send it encrypted with OpenPGP. */
+    val encrypt: Boolean = false,
+    /** Sign it with your OpenPGP key. */
+    val sign: Boolean = false,
     val updated: Long = System.currentTimeMillis(),
 ) {
     val isEmpty: Boolean get() = to.isEmpty() && cc.isEmpty() && bcc.isEmpty() && subject.isBlank() && body.isBlank()

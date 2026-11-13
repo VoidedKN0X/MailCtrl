@@ -29,6 +29,10 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,10 +66,16 @@ import com.vknxworks.mailctrl.mail.Address
 import com.vknxworks.mailctrl.mail.Attachment
 import com.vknxworks.mailctrl.mail.MessageBody
 import com.vknxworks.mailctrl.mail.OutgoingAttachment
+import com.vknxworks.mailctrl.mail.PgpPayload
+import com.vknxworks.mailctrl.pgp.KeyInfo
+import com.vknxworks.mailctrl.pgp.UnlockedKey
 import com.vknxworks.mailctrl.str
 import com.vknxworks.mailctrl.ui.components.ChoiceSheet
 import com.vknxworks.mailctrl.ui.components.ConfirmDialog
 import com.vknxworks.mailctrl.ui.components.CtrlCardShape
+import com.vknxworks.mailctrl.ui.components.CtrlChip
+import com.vknxworks.mailctrl.ui.pgp.PassphraseDialog
+import com.vknxworks.mailctrl.ui.pgp.WkdLookup
 import com.vknxworks.mailctrl.ui.components.CtrlFieldShape
 import com.vknxworks.mailctrl.ui.components.CtrlSquareButton
 import com.vknxworks.mailctrl.ui.components.LoadingView
@@ -109,6 +119,11 @@ private data class Start(
     val forwarded: List<Attachment> = emptyList(),
     val forwardFolder: String? = null,
     val forwardUid: Long? = null,
+    /** OpenPGP: start with encrypting and signing on (answering an encrypted message, a saved draft). */
+    val encrypt: Boolean = false,
+    val sign: Boolean = false,
+    /** It quotes or forwards an encrypted message. */
+    val quotesEncrypted: Boolean = false,
 )
 
 @Composable
@@ -166,6 +181,8 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 references = d.references,
                 replyFolder = d.replyFolder,
                 replyUid = d.replyUid,
+                encrypt = d.encrypt,
+                sign = d.sign,
             )
         }
         ComposeMode.REPLY, ComposeMode.REPLY_ALL, ComposeMode.FORWARD -> {
@@ -174,6 +191,9 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 ?: c.mail.open(account.id, folder, route.uid, markRead = false)
             val h = original.header
             val quotedText = plainText(original)
+            // An encrypted message is answered (and forwarded) encrypted, when the account has a key.
+            val wasEncrypted = original.decrypted || original.pgp is PgpPayload.Encrypted || original.pgp is PgpPayload.InlineEncrypted
+            val secure = wasEncrypted && account.pgpKey != null
             if (route.mode == ComposeMode.FORWARD) {
                 val head = buildString {
                     append("\n\n---------- ").append(str(R.string.forwarded_message)).append(" ----------\n")
@@ -191,6 +211,9 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                     forwarded = original.attachments.filterNot { it.isInline && original.inlineImages.containsKey(it.contentId) },
                     forwardFolder = folder,
                     forwardUid = route.uid,
+                    encrypt = secure,
+                    sign = secure,
+                    quotesEncrypted = wasEncrypted,
                 )
             }
             val me = account.email.lowercase()
@@ -215,6 +238,9 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 references = listOfNotNull(original.references, original.messageId).joinToString(" ").trim().ifBlank { null },
                 replyFolder = folder,
                 replyUid = route.uid,
+                encrypt = secure,
+                sign = secure,
+                quotesEncrypted = wasEncrypted,
             )
         }
         else -> {
@@ -283,6 +309,21 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
     var finished by remember { mutableStateOf(false) }
     val account = accounts.firstOrNull { it.id == accountId } ?: accounts.firstOrNull()
 
+    // OpenPGP: encrypt and sign switches, per message. Encrypting needs a key for every recipient, and the
+    // account's own key (everything is encrypted to you too).
+    val settings by c.settings.settings.collectAsStateWithLifecycle()
+    val pgpKeys by c.pgpKeys.keys.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { c.pgpKeys.load() }
+    val ownKey = account?.pgpKey?.let { fp -> pgpKeys.firstOrNull { it.info.fingerprint == fp && it.info.secret } }
+    var encrypt by rememberSaveable { mutableStateOf(start.encrypt) }
+    var sign by rememberSaveable { mutableStateOf(start.sign) }
+    var unlockFor by remember { mutableStateOf<KeyInfo?>(null) }
+    var wkdQueue by remember { mutableStateOf<List<String>>(emptyList()) }
+    val recipients = remember(to, cc, bcc) {
+        listOf(to, cc, bcc).flatMap { parseAddresses(it).orEmpty() }.map { it.email.trim().lowercase() }.distinct()
+    }
+    val missing = if (encrypt) recipients.filter { e -> pgpKeys.none { e in it.info.emails && it.info.canEncrypt } } else emptyList()
+
     LaunchedEffect(Unit) {
         loadProblem?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
         if (start.files.isNotEmpty()) {
@@ -308,6 +349,8 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         references = start.references,
         replyFolder = start.replyFolder,
         replyUid = start.replyUid,
+        encrypt = encrypt,
+        sign = sign,
     )
 
     // Unsent text is kept as a draft: when you leave, and before the app lock closes the screen.
@@ -334,7 +377,8 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         }
     }
 
-    fun send() {
+    /** [signer]: your key, just opened with its passphrase to sign this message. */
+    fun send(signer: UnlockedKey? = null) {
         val a = account ?: return
         val toList = parseAddresses(to)
         val ccList = parseAddresses(cc)
@@ -345,6 +389,19 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         }
         if (toList.isEmpty() && ccList.isEmpty() && bccList.isEmpty()) {
             Toast.makeText(context, context.getString(R.string.no_recipient), Toast.LENGTH_LONG).show()
+            return
+        }
+        // Never sent unprotected by surprise: a missing key stops it here, with the reason.
+        if ((encrypt || sign) && ownKey == null) {
+            Toast.makeText(context, context.getString(R.string.pgp_error_no_own_key), Toast.LENGTH_LONG).show()
+            return
+        }
+        if (encrypt && missing.isNotEmpty()) {
+            Toast.makeText(context, context.getString(R.string.pgp_error_missing_keys, missing.joinToString(", ")), Toast.LENGTH_LONG).show()
+            return
+        }
+        if (sign && signer == null && ownKey != null && !c.pgp.isOpen(ownKey.info.fingerprint)) {
+            unlockFor = ownKey.info
             return
         }
         val d = draft().copy(accountId = a.id, to = toList, cc = ccList, bcc = bccList)
@@ -374,7 +431,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
                 }
             }
             out
-        })
+        }, signer = signer)
         nav.back()
     }
 
@@ -389,7 +446,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             Spacer(Modifier.width(8.dp))
             CtrlSquareButton(Icons.Outlined.Delete, stringResource(R.string.discard), onClick = { discarding = true })
             Spacer(Modifier.width(8.dp))
-            CtrlSquareButton(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), onClick = ::send)
+            CtrlSquareButton(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), onClick = { send() })
             Spacer(Modifier.width(4.dp))
         }
         Column(
@@ -430,6 +487,28 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
                 colors = ctrlFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (ownKey != null || encrypt || sign) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CtrlChip(
+                        encrypt,
+                        onClick = { encrypt = !encrypt },
+                        label = stringResource(R.string.pgp_encrypt),
+                        leadingIcon = if (encrypt) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                    )
+                    CtrlChip(sign, onClick = { sign = !sign }, label = stringResource(R.string.pgp_sign), leadingIcon = Icons.Outlined.Verified)
+                }
+                PgpNotes(
+                    hasKey = ownKey != null,
+                    encrypt = encrypt,
+                    recipients = recipients.size,
+                    missing = missing,
+                    canLookUp = settings.wkdLookup,
+                    quotesEncrypted = start.quotesEncrypted,
+                    onLookUp = { wkdQueue = missing },
+                )
+            } else if (start.quotesEncrypted) {
+                PgpNotes(hasKey = false, encrypt = false, recipients = 0, missing = emptyList(), canLookUp = false, quotesEncrypted = true, onLookUp = {})
+            }
             if (files.isNotEmpty() || forwarded.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     files.forEach { f -> FileChip(f.name, fileSize(f.size)) { files.remove(f) } }
@@ -462,6 +541,16 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             picking = false
             accountId = id
         }
+    }
+
+    unlockFor?.let { info ->
+        PassphraseDialog(info, onDismiss = { unlockFor = null }) { key ->
+            unlockFor = null
+            send(key)
+        }
+    }
+    wkdQueue.firstOrNull()?.let { email ->
+        WkdLookup(email, onDismiss = { wkdQueue = wkdQueue.drop(1) })
     }
 
     if (discarding) {
@@ -513,6 +602,42 @@ private fun FileChip(name: String, size: String, onRemove: () -> Unit) {
             if (size.isNotBlank()) Text(size, style = CtrlType.Meta, color = CtrlColors.Muted)
         }
         IconButton(onClick = onRemove) { Icon(Icons.Outlined.Close, stringResource(R.string.remove), tint = CtrlColors.Muted) }
+    }
+}
+
+/** What the OpenPGP switches will do, and what's missing for them. */
+@Composable
+private fun PgpNotes(
+    hasKey: Boolean,
+    encrypt: Boolean,
+    recipients: Int,
+    missing: List<String>,
+    canLookUp: Boolean,
+    quotesEncrypted: Boolean,
+    onLookUp: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        when {
+            !hasKey -> Text(stringResource(R.string.pgp_error_no_own_key), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Error)
+            encrypt && missing.isNotEmpty() -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.pgp_compose_missing, missing.joinToString(", ")),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CtrlColors.Error,
+                    modifier = Modifier.weight(1f),
+                )
+                if (canLookUp) TextButton(onClick = onLookUp) { Text(stringResource(R.string.pgp_wkd_look_up)) }
+            }
+            encrypt && recipients > 0 -> Text(
+                stringResource(R.string.pgp_compose_encrypted),
+                style = MaterialTheme.typography.bodySmall,
+                color = CtrlColors.Muted,
+            )
+        }
+        if (encrypt) Text(stringResource(R.string.pgp_compose_subject), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Muted)
+        if (quotesEncrypted && !encrypt) {
+            Text(stringResource(R.string.pgp_compose_quotes_encrypted), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Error)
+        }
     }
 }
 

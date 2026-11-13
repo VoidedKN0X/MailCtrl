@@ -45,7 +45,9 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.Settings as SettingsIcon
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -69,6 +71,7 @@ import com.vknxworks.mailctrl.data.lock.LockVault
 import com.vknxworks.mailctrl.data.settings.AppSettings
 import com.vknxworks.mailctrl.data.settings.LockTimeout
 import com.vknxworks.mailctrl.data.settings.NotificationContent
+import com.vknxworks.mailctrl.data.settings.PassphraseMemory
 import com.vknxworks.mailctrl.data.settings.RemoteContent
 import com.vknxworks.mailctrl.data.settings.SwipeAction
 import com.vknxworks.mailctrl.ui.components.CtrlButton
@@ -80,7 +83,7 @@ import com.vknxworks.mailctrl.ui.components.GroupSwitch
 import com.vknxworks.mailctrl.ui.components.LocalBottomClearance
 import com.vknxworks.mailctrl.ui.components.ScreenTopBar
 import com.vknxworks.mailctrl.ui.components.SectionLabel
-import com.vknxworks.mailctrl.ui.components.avatarColor
+import com.vknxworks.mailctrl.ui.components.accountColor
 import com.vknxworks.mailctrl.ui.components.avatarInk
 import com.vknxworks.mailctrl.ui.lock.AppLock
 import com.vknxworks.mailctrl.ui.lock.PinRequest
@@ -89,6 +92,7 @@ import com.vknxworks.mailctrl.ui.nav.AccountSetupRoute
 import com.vknxworks.mailctrl.ui.nav.DraftsRoute
 import com.vknxworks.mailctrl.ui.nav.LocalNavigator
 import com.vknxworks.mailctrl.ui.nav.NotificationsRoute
+import com.vknxworks.mailctrl.ui.nav.PgpKeysRoute
 import com.vknxworks.mailctrl.ui.nav.SettingsRoute
 import com.vknxworks.mailctrl.ui.theme.CtrlColors
 import com.vknxworks.mailctrl.ui.theme.CtrlType
@@ -147,7 +151,7 @@ fun YouScreen() {
 
             Group(stringResource(R.string.group_accounts)) {
                 accounts.forEach { a ->
-                    val tone = avatarColor(a.id)
+                    val tone = accountColor(a)
                     GroupRow(
                         a.title,
                         listOfNotNull(
@@ -179,6 +183,13 @@ fun YouScreen() {
                     icon = Icons.Outlined.EditNote,
                     showChevron = true,
                     onClick = { nav.navigate(DraftsRoute) },
+                )
+                GroupRow(
+                    stringResource(R.string.pgp_keys),
+                    stringResource(R.string.pgp_keys_subtitle),
+                    icon = Icons.Outlined.VpnKey,
+                    showChevron = true,
+                    onClick = { nav.navigate(PgpKeysRoute) },
                 )
             }
 
@@ -224,6 +235,7 @@ fun SettingsScreen() {
     val context = LocalContext.current
     val c = context.container
     val scope = rememberCoroutineScope()
+    val nav = LocalNavigator.current
     val s by c.settings.settings.collectAsStateWithLifecycle()
     val accounts by c.accounts.accounts.collectAsStateWithLifecycle()
     fun update(t: (AppSettings) -> AppSettings) { scope.launch { c.settings.update(t) } }
@@ -259,6 +271,32 @@ fun SettingsScreen() {
                         icon = Icons.Outlined.Mail,
                     ) { v -> update { it.copy(defaultAccount = v) } }
                 }
+            }
+
+            Group(stringResource(R.string.group_pgp), footer = stringResource(R.string.pgp_settings_footer)) {
+                GroupRow(
+                    stringResource(R.string.pgp_keys),
+                    stringResource(R.string.pgp_keys_subtitle),
+                    icon = Icons.Outlined.VpnKey,
+                    showChevron = true,
+                    onClick = { nav.navigate(PgpKeysRoute) },
+                )
+                GroupChoice(
+                    stringResource(R.string.pgp_remember),
+                    PassphraseMemory.entries.map { it to stringResource(it.label) },
+                    s.pgpPassphrase,
+                    icon = Icons.Outlined.Timer,
+                ) { v ->
+                    // A shorter time applies straight away: passphrases remembered until now are forgotten.
+                    c.pgp.forget()
+                    update { it.copy(pgpPassphrase = v) }
+                }
+                GroupSwitch(
+                    stringResource(R.string.pgp_wkd),
+                    stringResource(R.string.pgp_wkd_subtitle),
+                    s.wkdLookup,
+                    icon = Icons.Outlined.TravelExplore,
+                ) { v -> update { it.copy(wkdLookup = v) } }
             }
 
             Group(stringResource(R.string.group_lists), footer = stringResource(R.string.swipe_footer)) {

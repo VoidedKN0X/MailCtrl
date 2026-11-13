@@ -4,6 +4,29 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.2.0 (2026-11-13)
+
+MailCtrl now does OpenPGP itself: encrypted and signed mail, with your own keys, no extra app needed. And "All inboxes" shows every account's mail together, each message tagged with its account's colour.
+
+### New
+
+- **Encrypted mail (OpenPGP), built in.** Read and send encrypted and signed mail without OpenKeychain or any other app. It works with GnuPG, Thunderbird, Proton and other OpenPGP programs (PGP/MIME, and the older inline style for reading).
+- **Your own keys.** Make a key under your profile picture › **OpenPGP keys** (Curve25519, or RSA 4096 for very old software), with an expiry date if you like, or import one you already have (a public or secret key file, armored or binary). Every key shows its fingerprint and when it expires. Secret keys never leave the phone: they're encrypted with its secure hardware, and still protected by their own passphrase inside that.
+- **Passphrase remembered for a while.** After you type a key's passphrase, MailCtrl remembers it (in memory only) for 5 minutes by default; choose from "Don't remember" to "Until MailCtrl locks or closes" in Settings › OpenPGP. It's always forgotten when the app lock locks.
+- **Reading encrypted mail.** Encrypted messages are decrypted on the phone, attachments included; tap **Unlock** to enter your passphrase when it isn't remembered. Messages encrypted without an integrity check are refused, so nobody can tamper with them unnoticed.
+- **Signatures you can trust at a glance.** A signed message says **Signed by** who signed it, **Signed with an unknown key** when you don't have the signer's key yet, or **Bad signature** in red when it was changed after signing. It also warns when the key belongs to a different address than the sender's, or has expired.
+- **Writing encrypted mail.** **Encrypt** and **Sign** switches under the subject, for each message. MailCtrl tells you which recipients have no key, and never sends a message unencrypted when you asked for encryption. Everything you encrypt is encrypted to your own key too, so you can still read it in Sent. Answering an encrypted message starts with encryption on.
+- **Your contacts' keys.** Import them from a file, from a key attached to a message (the key button next to the attachment), or from the sender's **Autocrypt** header (MailCtrl offers it; nothing is imported without your tap). Each key shows its fingerprint to compare with the person.
+- **Look up a key (optional).** When someone's key is missing, **Look up** asks their own mail domain for it (Web Key Directory). It only happens when you tap it, and MailCtrl tells you which domain it will contact first. You can turn the button off in Settings.
+- **Send your key with Autocrypt (optional).** Turn it on per account, and every message you send carries your public key, so people with Autocrypt-capable apps can write back encrypted.
+- **All inboxes.** The Inbox tab shows every account's inbox together, newest first, each message tagged with its account's name and colour. Each chip shows its unread count. Actions (read, flag, archive, delete, move) always happen on the message's own account.
+- **Account colours, and which accounts are in All inboxes.** In an account's settings, pick its colour and whether it's part of All inboxes. The unread counts follow that choice, and with several accounts each account's notifications carry its colour as well as its name.
+- **All inboxes in the Folders tab,** with its unread count, one tap away.
+
+### Changed
+
+- The "Combined inbox" setting is now called **All inboxes**.
+
 ## v0.1.9 (2026-11-13)
 
 ### Security

@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.data.MailActions
+import com.vknxworks.mailctrl.data.accounts.Account
 import com.vknxworks.mailctrl.mail.FolderRole
 import com.vknxworks.mailctrl.mail.LockedException
 import com.vknxworks.mailctrl.mail.MessageHeader
@@ -66,6 +67,7 @@ import com.vknxworks.mailctrl.ui.components.LocalBottomClearance
 import com.vknxworks.mailctrl.ui.components.MessageView
 import com.vknxworks.mailctrl.ui.components.ScreenTopBar
 import com.vknxworks.mailctrl.ui.components.TabTitle
+import com.vknxworks.mailctrl.ui.components.accountColor
 import com.vknxworks.mailctrl.ui.components.friendlyMessage
 import com.vknxworks.mailctrl.ui.components.rememberNotificationAccess
 import com.vknxworks.mailctrl.ui.components.runTask
@@ -79,6 +81,31 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/** What the Inbox tab shows. */
+data class InboxSelection(
+    /** "All inboxes" is offered (the setting is on and there's more than one account). */
+    val allInboxes: Boolean,
+    /** The one account shown, or null for "All inboxes". */
+    val selectedId: String?,
+    /** The accounts that make up "All inboxes". */
+    val inAll: List<Account>,
+    /** The accounts whose inbox is shown (refreshed, counted, marked read) right now. */
+    val ids: List<String>,
+)
+
+/**
+ * Which inboxes the Inbox tab shows: the [chosen] account, or "All inboxes" made of the accounts that are in it
+ * (all of them when none is, so it's never empty). With one account, or "All inboxes" off, the first account.
+ */
+fun inboxSelection(accounts: List<Account>, unifiedSetting: Boolean, chosen: String?): InboxSelection {
+    val allInboxes = unifiedSetting && accounts.size > 1
+    val selectedId = chosen?.takeIf { id -> accounts.any { it.id == id } }
+        ?: if (!allInboxes) accounts.firstOrNull()?.id else null
+    val inAll = accounts.filter { it.unified }.ifEmpty { accounts }
+    val ids = if (selectedId == null) inAll.map { it.id } else listOf(selectedId)
+    return InboxSelection(allInboxes, selectedId, inAll, ids)
+}
+
 /** A problem refreshing one account, shown above the list. */
 private data class AccountProblem(val accountId: String, val error: Throwable)
 
@@ -91,11 +118,26 @@ fun InboxScreen() {
     val accounts by c.accounts.accounts.collectAsStateWithLifecycle()
     val settings by c.settings.settings.collectAsStateWithLifecycle()
     val version by c.cache.version.collectAsStateWithLifecycle()
-    // null = all accounts together.
+    // null = "All inboxes": every account that's in it (its own setting), newest first.
     var chosen by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedId = chosen?.takeIf { id -> accounts.any { it.id == id } }
-        ?: if (!settings.unifiedInbox || accounts.size == 1) accounts.firstOrNull()?.id else null
-    val ids = if (selectedId == null) accounts.map { it.id } else listOf(selectedId)
+    val sel = inboxSelection(accounts, settings.unifiedInbox, chosen)
+    val allInboxes = sel.allInboxes
+    val selectedId = sel.selectedId
+    val inAll = sel.inAll
+    val ids = sel.ids
+    // "All inboxes" in the Folders tab opens this view.
+    LaunchedEffect(Unit) {
+        c.showAllInboxes.collect { show ->
+            if (show) {
+                chosen = null
+                c.showAllInboxes.value = false
+            }
+        }
+    }
+    // Unread in each inbox, as on the phone: the chips show them, and "All inboxes" adds up the accounts in it.
+    val unreadByAccount by produceState(emptyMap<String, Int>(), version, accounts) {
+        value = accounts.associate { it.id to c.cache.inboxUnread(listOf(it.id)) }
+    }
 
     val headers by produceState<List<MessageHeader>?>(null, version, ids) {
         value = if (selectedId == null) c.cache.unifiedInbox(ids) else c.cache.messages(selectedId, MailActions.INBOX)
@@ -148,7 +190,9 @@ fun InboxScreen() {
     val unread = headers?.count { !it.seen } ?: 0
     val listState = rememberLazyListState()
     val expandedFab by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
-    val names = remember(accounts, selectedId) { if (selectedId == null && accounts.size > 1) accounts.associate { it.id to it.title } else null }
+    val names = remember(accounts, selectedId) {
+        if (selectedId == null && accounts.size > 1) accounts.associate { it.id to AccountTag(it.title, accountColor(it)) } else null
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -171,11 +215,16 @@ fun InboxScreen() {
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Gutter),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (settings.unifiedInbox) {
-                        CtrlChip(selectedId == null, onClick = { chosen = null }, label = stringResource(R.string.all_accounts))
+                    fun withCount(label: String, n: Int) = if (n > 0) "$label · $n" else label
+                    if (allInboxes) {
+                        CtrlChip(
+                            selectedId == null,
+                            onClick = { chosen = null },
+                            label = withCount(stringResource(R.string.all_inboxes), inAll.sumOf { unreadByAccount[it.id] ?: 0 }),
+                        )
                     }
                     accounts.forEach { a ->
-                        CtrlChip(selectedId == a.id, onClick = { chosen = a.id }, label = a.title)
+                        CtrlChip(selectedId == a.id, onClick = { chosen = a.id }, label = withCount(a.title, unreadByAccount[a.id] ?: 0), dot = accountColor(a))
                     }
                 }
             }

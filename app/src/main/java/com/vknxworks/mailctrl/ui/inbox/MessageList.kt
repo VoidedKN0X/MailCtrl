@@ -96,7 +96,7 @@ import com.vknxworks.mailctrl.ui.components.CtrlSquareButton
 import com.vknxworks.mailctrl.ui.components.LocalBottomClearance
 import com.vknxworks.mailctrl.ui.components.SectionLabel
 import com.vknxworks.mailctrl.ui.components.SheetAction
-import com.vknxworks.mailctrl.ui.components.avatarColor
+import com.vknxworks.mailctrl.ui.components.avatarInk
 import com.vknxworks.mailctrl.ui.components.runTask
 import com.vknxworks.mailctrl.ui.components.shortTime
 import com.vknxworks.mailctrl.ui.components.topDivider
@@ -105,6 +105,9 @@ import com.vknxworks.mailctrl.ui.theme.CtrlType
 import com.vknxworks.mailctrl.ui.theme.Gutter
 import kotlinx.coroutines.launch
 
+/** An account's name and colour, shown on each message of it in "All inboxes". */
+data class AccountTag(val name: String, val color: Color)
+
 /**
  * A list of messages: tap opens one, long-press starts selecting, swipe left or right does what you chose in
  * Settings, pull down refreshes and scrolling to the end loads older mail.
@@ -112,8 +115,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun MessageList(
     headers: List<MessageHeader>,
-    /** Account names to show on each row (the combined inbox), or null when all rows are one account's. */
-    accountNames: Map<String, String>?,
+    /** Account names and colours to show on each row ("All inboxes"), or null when all rows are one account's. */
+    accountNames: Map<String, AccountTag>?,
     refreshing: Boolean,
     onRefresh: () -> Unit,
     hasMore: Boolean,
@@ -366,7 +369,7 @@ fun SelectionTitle(count: Int, onClose: () -> Unit) {
 fun MessageRow(
     first: Boolean,
     h: MessageHeader,
-    account: String?,
+    account: AccountTag?,
     showRecipients: Boolean,
     selected: Boolean,
     modifier: Modifier,
@@ -453,9 +456,9 @@ fun MessageRow(
             if (account != null) {
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(6.dp).clip(RoundedCornerShape(2.dp)).background(avatarColor(h.accountId)))
+                    Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(account.color))
                     Spacer(Modifier.width(6.dp))
-                    Text(account.uppercase(), style = CtrlType.Status, color = CtrlColors.Inactive, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(account.name.uppercase(), style = CtrlType.Status, color = avatarInk(account.color), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

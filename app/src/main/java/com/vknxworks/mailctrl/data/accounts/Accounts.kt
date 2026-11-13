@@ -50,11 +50,33 @@ data class Account(
     val trashFolder: String? = null,
     val archiveFolder: String? = null,
     val junkFolder: String? = null,
+    /** Your own OpenPGP key for this account (fingerprint): it signs, and you encrypt to it too. */
+    val pgpKey: String? = null,
+    /** Send your public key in an Autocrypt header with every message (off until you turn it on). */
+    val autocrypt: Boolean = false,
+    /** The account's colour in lists (an index into the account colours), or -1 for one picked from the account. */
+    val color: Int = -1,
+    /** Shown in "All inboxes". */
+    val unified: Boolean = true,
 ) {
     val title: String get() = label.trim().ifEmpty { email }
 
     /** Mail travels unencrypted to and from at least one of the servers. */
     val unencrypted: Boolean get() = imap.security == Security.NONE || smtp.security == Security.NONE
+}
+
+/** The colours an account can have in lists and notifications (ARGB), the same set senders' avatars use. */
+object AccountColors {
+    val palette: List<Int> = listOf(
+        0xFFB48CFF, 0xFF7FC8F8, 0xFF8BD8C6, 0xFFF4C76B,
+        0xFFF2A0A0, 0xFFA6D68A, 0xFFF2B880, 0xFF9FB4F2,
+    ).map { it.toInt() }
+
+    /** A steady colour picked from [key] (an account id, a sender's address). */
+    fun forKey(key: String): Int = palette[(kotlin.math.abs(key.lowercase().hashCode()) % palette.size).coerceAtLeast(0)]
+
+    /** The account's own colour: the one you picked, or one picked from the account. */
+    fun of(account: Account): Int = palette.getOrNull(account.color) ?: forKey(account.id)
 }
 
 /** Server settings MailCtrl knows for an address, or a best guess. */

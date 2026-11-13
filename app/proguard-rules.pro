@@ -33,3 +33,7 @@
     public static int d(...);
     public static int i(...);
 }
+
+# Bouncy Castle (OpenPGP). MailCtrl only uses its lightweight API (org.bouncycastle.openpgp, bcpg, crypto), which
+# loads nothing by name, so R8 can shrink it like any other code. Its JCA provider and X.509 parts aren't used.
+-dontwarn org.bouncycastle.**

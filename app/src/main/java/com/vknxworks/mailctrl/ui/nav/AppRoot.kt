@@ -67,6 +67,9 @@ import com.vknxworks.mailctrl.ui.folders.FoldersScreen
 import com.vknxworks.mailctrl.ui.inbox.FolderScreen
 import com.vknxworks.mailctrl.ui.inbox.InboxScreen
 import com.vknxworks.mailctrl.ui.message.MessageScreen
+import com.vknxworks.mailctrl.ui.pgp.PgpGenerateScreen
+import com.vknxworks.mailctrl.ui.pgp.PgpKeyScreen
+import com.vknxworks.mailctrl.ui.pgp.PgpKeysScreen
 import com.vknxworks.mailctrl.ui.search.SearchScreen
 import com.vknxworks.mailctrl.ui.settings.NotificationsScreen
 import com.vknxworks.mailctrl.ui.settings.SettingsScreen
@@ -223,5 +226,8 @@ private fun AppNavHost(navController: NavHostController) {
         composable<SettingsRoute> { SettingsScreen() }
         composable<NotificationsRoute> { NotificationsScreen() }
         composable<AccountSetupRoute> { AccountSetupScreen(it.toRoute<AccountSetupRoute>().accountId, first = false) }
+        composable<PgpKeysRoute> { PgpKeysScreen() }
+        composable<PgpKeyRoute> { PgpKeyScreen(it.toRoute<PgpKeyRoute>().fingerprint) }
+        composable<PgpGenerateRoute> { PgpGenerateScreen(it.toRoute<PgpGenerateRoute>().accountId) }
     }
 }

@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.vknxworks.mailctrl.R
+import com.vknxworks.mailctrl.data.accounts.Account
+import com.vknxworks.mailctrl.data.accounts.AccountColors
 import com.vknxworks.mailctrl.str
 import com.vknxworks.mailctrl.ui.lock.AppLock
 import com.vknxworks.mailctrl.ui.theme.LocalCtrlColors
@@ -66,13 +68,14 @@ fun attachmentSize(encoded: Long): String = if (encoded < 0) "" else fileSize(en
 
 // ---------- Avatars ----------
 
-private val avatarColors = listOf(
-    Color(0xFFB48CFF), Color(0xFF7FC8F8), Color(0xFF8BD8C6), Color(0xFFF4C76B),
-    Color(0xFFF2A0A0), Color(0xFFA6D68A), Color(0xFFF2B880), Color(0xFF9FB4F2),
-)
-
 /** A steady colour per sender (or account), so the same one always looks the same. */
-fun avatarColor(key: String): Color = avatarColors[abs(key.lowercase().hashCode()) % avatarColors.size]
+fun avatarColor(key: String): Color = Color(AccountColors.forKey(key))
+
+/** The account's colour: the one picked in its settings, or its steady one. */
+fun accountColor(account: Account): Color = Color(AccountColors.of(account))
+
+/** The colours to pick from for an account. */
+val accountPalette: List<Color> get() = AccountColors.palette.map { Color(it) }
 
 /** [color] as text or an icon: as is in dark, darkened in light so it reads on a pale background. */
 @Composable

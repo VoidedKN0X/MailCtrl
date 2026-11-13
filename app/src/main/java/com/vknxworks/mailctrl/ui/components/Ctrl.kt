@@ -420,13 +420,19 @@ fun CtrlChip(
     modifier: Modifier = Modifier,
     leadingIcon: ImageVector? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
+    /** A small colour square before the label (an account's colour). */
+    dot: Color? = null,
 ) {
     FilterChip(
         selected = selected,
         onClick = onClick,
         label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         modifier = modifier,
-        leadingIcon = leadingIcon?.let { { Icon(it, null, Modifier.size(18.dp)) } },
+        leadingIcon = when {
+            leadingIcon != null -> { { Icon(leadingIcon, null, Modifier.size(18.dp)) } }
+            dot != null -> { { Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(dot)) } }
+            else -> null
+        },
         trailingIcon = trailingIcon,
         shape = CtrlChipShape,
         colors = FilterChipDefaults.filterChipColors(

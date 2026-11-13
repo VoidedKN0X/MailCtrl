@@ -8,7 +8,8 @@
     <string name="account_remove_title">Remove %1$s?</string>
     <string name="account_unencrypted">Unencrypted</string>
     <string name="add_account">Add account</string>
-    <string name="all_accounts">All accounts</string>
+    <string name="all_inboxes">All inboxes</string>
+    <string name="all_inboxes_subtitle">Every account\'s inbox together, newest first</string>
     <string name="answered">Answered</string>
     <string name="app_name">MailCtrl</string>
     <string name="archive">Archive</string>
@@ -315,8 +316,8 @@
     <string name="to_line">to %1$s</string>
     <string name="undo">Undo</string>
     <string name="unflag">Unflag</string>
-    <string name="unified_inbox">Combined inbox</string>
-    <string name="unified_inbox_subtitle">The Inbox tab shows every account\'s inbox together</string>
+    <string name="unified_inbox">All inboxes</string>
+    <string name="unified_inbox_subtitle">The Inbox tab can show every account\'s inbox together, newest first. Each account chooses whether it\'s in it</string>
     <string name="unknown_sender">Unknown sender</string>
     <string name="unsubscribe">Unsubscribe</string>
     <string name="write">Write</string>
@@ -351,4 +352,163 @@
     <string name="error_web_login">The provider blocked this sign-in until you confirm it in a web browser. Sign in to your mail on the web, approve it, then try again.</string>
     <string name="server_said">The server said: %1$s</string>
     <string name="setup_make_app_password">Make an app password</string>
+
+    <!-- Account settings: lists and OpenPGP -->
+    <string name="setup_in_lists">In lists</string>
+    <string name="setup_color">Colour</string>
+    <string name="setup_color_auto">Automatic colour</string>
+    <string name="setup_color_n">Colour %1$d</string>
+    <string name="setup_unified">Show in All inboxes</string>
+    <string name="setup_unified_subtitle">Its mail and unread count are part of All inboxes</string>
+    <string name="setup_pgp_key">OpenPGP key</string>
+    <string name="setup_pgp_none">None</string>
+    <string name="setup_autocrypt">Send my key (Autocrypt)</string>
+    <string name="setup_autocrypt_subtitle">Adds your public key to every message you send, so people can write back encrypted</string>
+    <string name="setup_autocrypt_footer">The key signs what you send and is used to decrypt what\'s sent to you. Everything you encrypt is encrypted to it too, so you can read your own sent mail.</string>
+
+    <!-- OpenPGP: settings -->
+    <string name="group_pgp">OpenPGP</string>
+    <string name="pgp_settings_footer">Passphrases are only ever kept in memory, and forgotten when MailCtrl locks. Looking up a key asks the recipient\'s own mail domain for it, only when you tap Look up.</string>
+    <string name="pgp_keys">OpenPGP keys</string>
+    <string name="pgp_keys_subtitle">Your keys and your contacts\' keys, to encrypt and sign mail</string>
+    <string name="pgp_remember">Remember passphrase</string>
+    <string name="pgp_remember_never">Don\'t remember</string>
+    <string name="pgp_remember_1m">1 minute</string>
+    <string name="pgp_remember_5m">5 minutes</string>
+    <string name="pgp_remember_15m">15 minutes</string>
+    <string name="pgp_remember_1h">1 hour</string>
+    <string name="pgp_remember_lock">Until MailCtrl locks or closes</string>
+    <string name="pgp_wkd">Look up keys (WKD)</string>
+    <string name="pgp_wkd_subtitle">Offer “Look up” for a missing key. It asks the person\'s mail domain, and only when you tap it</string>
+
+    <!-- OpenPGP: errors -->
+    <string name="pgp_error_not_pgp">There\'s no OpenPGP data here</string>
+    <string name="pgp_error_no_secret_key">This message is encrypted, but not to any of your keys on this phone</string>
+    <string name="pgp_error_broken">The encrypted data is damaged or was changed on the way, so it isn\'t shown</string>
+    <string name="pgp_error_not_protected">This message was encrypted without an integrity check, so it could have been changed by someone else. It isn\'t shown, to keep you safe.</string>
+    <string name="pgp_error_too_big">That\'s too big to handle on the phone</string>
+    <string name="pgp_error_no_encryption_key">There\'s no valid key to encrypt to</string>
+    <string name="pgp_error_no_signing_key">Your key can\'t sign: it has expired, was revoked, or has no signing key</string>
+    <string name="pgp_error_no_own_key">This account has no OpenPGP key. Pick or make one in the account\'s settings, or turn Encrypt and Sign off.</string>
+    <string name="pgp_error_key_locked">Your key is locked: enter its passphrase to sign</string>
+    <string name="pgp_error_missing_keys">No key to encrypt to for %1$s</string>
+    <string name="pgp_error_own_key_unusable">Your own key can\'t be encrypted to (it has expired or was revoked)</string>
+    <string name="pgp_attachment_locked">Open the message again to decrypt this attachment</string>
+
+    <!-- OpenPGP: keys -->
+    <string name="pgp_state_revoked">Revoked</string>
+    <string name="pgp_state_expired">Expired %1$s</string>
+    <string name="pgp_state_expires">Expires %1$s</string>
+    <string name="pgp_state_unusable">Can\'t be used</string>
+    <string name="pgp_state_no_expiry">No expiry date</string>
+    <string name="pgp_file_unreadable">Couldn\'t read that file</string>
+    <string name="pgp_your_keys">Your keys</string>
+    <string name="pgp_your_keys_footer">Your secret keys stay on this phone, encrypted with its secure hardware and protected by their passphrase. Only public keys can be shared.</string>
+    <string name="pgp_generate">Make a new key</string>
+    <string name="pgp_import_file">Import a key file</string>
+    <string name="pgp_import_file_subtitle">A public or secret key, armored (.asc) or binary (.gpg, .pgp)</string>
+    <string name="pgp_contact_keys">Contacts\' keys</string>
+    <string name="pgp_contact_keys_footer">Keys come from files, attachments, the Autocrypt header of a message, or a lookup. Compare the fingerprint with the person before you rely on a key.</string>
+    <string name="pgp_no_contact_keys">No keys yet</string>
+    <string name="pgp_wkd_find">Look up a key by address</string>
+    <string name="pgp_wkd_find_subtitle">Asks that address\'s mail domain (Web Key Directory)</string>
+    <string name="pgp_wkd_look_up">Look up</string>
+    <string name="pgp_your_key">Your key</string>
+    <string name="pgp_contact_key">Contact\'s key</string>
+    <string name="pgp_fingerprint">Fingerprint</string>
+    <string name="pgp_fingerprint_footer">To be sure a key is really theirs, compare this with the fingerprint the person reads out to you.</string>
+    <string name="pgp_details">Details</string>
+    <string name="pgp_created">Created</string>
+    <string name="pgp_expires">Expires</string>
+    <string name="pgp_never">Never</string>
+    <string name="pgp_algorithm">Algorithm</string>
+    <string name="pgp_usable_for">Can</string>
+    <string name="pgp_use_encrypt">Encrypt</string>
+    <string name="pgp_use_sign">Sign</string>
+    <string name="pgp_protection">Secret key</string>
+    <string name="pgp_protected">Protected with a passphrase</string>
+    <string name="pgp_unprotected">No passphrase: anyone with this phone unlocked can use it</string>
+    <string name="pgp_used_by">Used by</string>
+    <string name="pgp_used_by_footer">An account signs with its key and is encrypted to it. One key per account.</string>
+    <string name="pgp_share_public">Share public key</string>
+    <string name="pgp_save_public">Save public key</string>
+    <string name="pgp_delete">Delete key</string>
+    <string name="pgp_delete_title">Delete this key?</string>
+    <string name="pgp_delete_secret_body">This is your secret key. Without it, mail encrypted to it can\'t be read on this phone any more, and this can\'t be undone.</string>
+    <string name="pgp_delete_body">You can\'t encrypt to this person or check their signatures until you import their key again.</string>
+    <string name="pgp_generate_intro">Your key is made on this phone and never leaves it; only its public part is shared. Curve25519 is small and fast, and what GnuPG, Thunderbird and Proton make too.</string>
+    <string name="pgp_for_account">For</string>
+    <string name="pgp_key_type">Kind of key</string>
+    <string name="pgp_type_25519">Curve25519 (recommended)</string>
+    <string name="pgp_type_rsa">RSA 4096 (for very old software)</string>
+    <string name="pgp_valid_for">Valid for</string>
+    <string name="pgp_name">Your name in the key</string>
+    <string name="pgp_passphrase">Passphrase</string>
+    <string name="pgp_passphrase_repeat">Passphrase again</string>
+    <string name="pgp_passphrase_note">The passphrase can\'t be recovered. Without it, mail encrypted to this key can\'t be read.</string>
+    <string name="pgp_passphrase_short">At least %1$d characters</string>
+    <string name="pgp_passphrase_mismatch">The passphrases don\'t match</string>
+    <string name="pgp_generate_button">Make key</string>
+    <string name="pgp_generating">Making your key…</string>
+    <string name="pgp_generating_rsa">Making your key… An RSA key can take a minute.</string>
+    <string name="pgp_generated">Key made</string>
+    <string name="pgp_show_passphrase">Show passphrase</string>
+    <string name="pgp_hide_passphrase">Hide passphrase</string>
+    <string name="pgp_unlock_title">Unlock your key</string>
+    <string name="pgp_unlock">Unlock</string>
+    <string name="pgp_wrong_passphrase">Wrong passphrase</string>
+    <string name="pgp_unlock_remembered">Remembered: %1$s (change it in Settings)</string>
+    <string name="pgp_kind_secret">Secret key</string>
+    <string name="pgp_kind_public">Public key</string>
+    <string name="pgp_import">Import</string>
+    <string name="pgp_import_key">Import key</string>
+    <string name="pgp_import_replaces">You already have a different key for this address. Only import this one if you know the person changed their key.</string>
+    <string name="pgp_import_check">Compare the fingerprint with the person before you rely on this key.</string>
+    <string name="pgp_no_key_in_file">No OpenPGP key in this file</string>
+    <string name="pgp_wkd_title">Look up key</string>
+    <string name="pgp_wkd_body">MailCtrl will ask %2$s for the key of %1$s, over HTTPS. That tells %2$s that someone looked this address up, from your connection.</string>
+    <string name="pgp_wkd_searching">Asking %1$s…</string>
+    <string name="pgp_wkd_none">No key was found for %1$s</string>
+    <string name="pgp_wkd_failed">Couldn\'t reach %1$s</string>
+
+    <!-- OpenPGP: reading -->
+    <string name="pgp_working">Decrypting and checking…</string>
+    <string name="pgp_encrypted">Encrypted</string>
+    <string name="pgp_encrypted_ok">Decrypted on this phone. Only you and the recipients can read it.</string>
+    <string name="pgp_encrypted_locked">Encrypted to your key %1$s. Unlock it with its passphrase to read the message.</string>
+    <string name="pgp_problem">OpenPGP problem</string>
+    <string name="pgp_sig_valid">Signed by %1$s</string>
+    <string name="pgp_sig_other_address">The key is for %1$s, not the sender\'s address</string>
+    <string name="pgp_sig_key_problem">The key has expired or was revoked, or isn\'t meant for signing</string>
+    <string name="pgp_sig_unknown">Signed with an unknown key</string>
+    <string name="pgp_sig_unknown_body">Key %1$s isn\'t on this phone, so the signature can\'t be checked</string>
+    <string name="pgp_sig_bad">Bad signature</string>
+    <string name="pgp_sig_bad_body">This message was changed after it was signed, or the signature is forged</string>
+    <string name="pgp_offer_title">The sender\'s key is in this message</string>
+    <string name="pgp_offer_replaces">You have a different key for this address</string>
+
+    <!-- OpenPGP: writing -->
+    <string name="pgp_encrypt">Encrypt</string>
+    <string name="pgp_sign">Sign</string>
+    <string name="pgp_compose_missing">No key for %1$s</string>
+    <string name="pgp_compose_encrypted">Encrypted to every recipient\'s key, and to yours</string>
+    <string name="pgp_compose_subject">The subject isn\'t encrypted.</string>
+    <string name="pgp_compose_quotes_encrypted">You\'re quoting an encrypted message without encryption.</string>
+
+    <plurals name="all_inboxes_unread">
+        <item quantity="one">%1$d unread</item>
+        <item quantity="other">%1$d unread</item>
+    </plurals>
+    <plurals name="pgp_years">
+        <item quantity="one">%1$d year</item>
+        <item quantity="other">%1$d years</item>
+    </plurals>
+    <plurals name="pgp_import_title">
+        <item quantity="one">Import this key?</item>
+        <item quantity="other">Import these keys?</item>
+    </plurals>
+    <plurals name="pgp_imported">
+        <item quantity="one">Key imported</item>
+        <item quantity="other">%1$d keys imported</item>
+    </plurals>
 </resources>

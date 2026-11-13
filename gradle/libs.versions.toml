@@ -13,6 +13,8 @@ coroutines = "1.10.2"
 coil = "3.2.0"
 androidMail = "1.6.7"
 work = "2.10.2"
+bouncycastle = "1.86"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -34,6 +36,9 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" 
 android-mail = { module = "com.sun.mail:android-mail", version.ref = "androidMail" }
 android-activation = { module = "com.sun.mail:android-activation", version.ref = "androidMail" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+bouncycastle-pg = { module = "org.bouncycastle:bcpg-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -12,8 +12,9 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 
 ## Features
 
-- **Several accounts**, each with its own name, signature and notifications
-- **Combined inbox** for every account together, or one account at a time
+- **Several accounts**, each with its own name, colour, signature and notifications
+- **All inboxes**: every account's inbox together, newest first, each message tagged with its account's name and colour; or one account at a time. Each account chooses whether it's in it
+- **OpenPGP encryption built in**: read and send encrypted and signed mail (PGP/MIME), make or import your own keys, import your contacts' keys from files, attachments or Autocrypt, no other app needed (see [Encrypted mail (OpenPGP)](#encrypted-mail-openpgp))
 - **All your folders**, with unread counts; Sent, Drafts, Archive, Junk and Trash are found by themselves
 - **Read mail safely**: HTML messages are shown without scripts, and pictures from the internet stay blocked until you tap **Load** (see [Reading mail](#reading-mail))
 - **Write, reply, reply all and forward**, with Cc and Bcc, attachments from any app, and the original attachments when forwarding
@@ -96,6 +97,18 @@ Then:
 - **Unsubscribe**: when a newsletter offers it, it's in the message's menu.
 - MailCtrl keeps a **list of your messages** on the phone (sender, subject, date, flags) so it opens instantly, and refreshes it by downloading only what changed. The messages themselves are fetched from your server when you open them; the few you opened lately (and the newest unread ones, read ahead) are kept **in memory only** so they open again instantly, and forgotten when MailCtrl locks or closes.
 
+## Encrypted mail (OpenPGP)
+
+MailCtrl encrypts, decrypts, signs and checks signatures itself (with [Bouncy Castle](https://www.bouncycastle.org/)), so you don't need OpenKeychain or any other app. It works with GnuPG, Thunderbird, Proton and other OpenPGP programs.
+
+- **Your key:** under your profile picture › **OpenPGP keys**, make one (Curve25519, or RSA 4096 for very old software) or import the one you already use. Pick it for an account in the account's settings. Secret keys never leave the phone: they're encrypted with its secure hardware and still protected by their own passphrase inside that. Only public keys can be shared or saved.
+- **Passphrase:** remembered in memory only, for 5 minutes by default (Settings › OpenPGP › **Remember passphrase**, from "Don't remember" to "Until MailCtrl locks or closes"), and always forgotten when the app lock locks.
+- **Reading:** encrypted messages (PGP/MIME, or an inline `-----BEGIN PGP MESSAGE-----` block) are decrypted on the phone, attachments included. Messages encrypted without an integrity check are refused, because they can be tampered with. Signatures show as **Signed by …** (valid), **Signed with an unknown key** (you don't have the signer's key), or **Bad signature** (changed after signing, or forged), with a warning when the key is for another address or has expired.
+- **Writing:** the **Encrypt** and **Sign** switches under the subject work per message, and send PGP/MIME. Encrypting needs a key for every recipient; MailCtrl says which are missing and never falls back to sending unencrypted. Everything is encrypted to your own key too, so you can read it in Sent. The subject isn't encrypted.
+- **Contacts' keys:** import them from a file, from a key attached to a message, or from the sender's Autocrypt header (MailCtrl offers it; you tap **Import**). Compare the fingerprint with the person before relying on a key.
+- **Look up a key:** when a key is missing, **Look up** asks the person's own mail domain for it ([Web Key Directory](https://wiki.gnupg.org/WKD)). Only when you tap it, after MailCtrl tells you which domain it will contact. Turn the button off in Settings › OpenPGP.
+- **Autocrypt:** turn on **Send my key** in an account's settings to put your public key in every message you send, so people can write back encrypted. Off until you turn it on.
+
 ## Notifications
 
 MailCtrl checks your inboxes itself, by default every 15 minutes, and notifies you about new mail. There's no push service from Google or anyone else.
@@ -168,7 +181,7 @@ Every permission MailCtrl has, and what it's for:
 
 | Permission | What MailCtrl uses it for |
 | --- | --- |
-| Internet (`INTERNET`) | Connecting to your own mail servers (IMAP and SMTP), and to your own ntfy address when you tap **Send a test wake-up** |
+| Internet (`INTERNET`) | Connecting to your own mail servers (IMAP and SMTP), to your own ntfy address when you tap **Send a test wake-up**, and to a recipient's mail domain when you tap **Look up** for their OpenPGP key |
 | Network state (`ACCESS_NETWORK_STATE`) | Only running background mail checks when the phone is online |
 | Notifications (`POST_NOTIFICATIONS`) | New-mail notifications; asked for when you turn notifications on |
 | Run at startup (`RECEIVE_BOOT_COMPLETED`) | Setting the background mail checks up again after the phone restarts (through Android's WorkManager) |
@@ -184,6 +197,8 @@ Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORT
 **Telemetry-free.** MailCtrl has no analytics, crash reporting, usage stats or tracking of any kind.
 
 - **Only your own servers.** MailCtrl connects to the IMAP and SMTP servers of your accounts and nothing else (and, when you test it, your own ntfy address). There's no MailCtrl server, and no online look-up of server settings: known providers are a list inside the app.
+- **OpenPGP key lookup (optional, on tap only).** When you tap **Look up** for a missing key, MailCtrl asks that person's mail domain for it over HTTPS (Web Key Directory: `openpgpkey.<domain>`, then `<domain>`), after telling you which domain. That domain learns that someone looked the address up, from your connection. Nothing is looked up by itself; turn the button off under Settings › OpenPGP › **Look up keys (WKD)**.
+- **OpenPGP keys** are kept on the phone, encrypted with its secure hardware; secret keys are also protected by their passphrase, which is only ever kept in memory. Your public key is only sent when you turn on **Send my key (Autocrypt)** for an account, or share it yourself.
 - **Passwords** are encrypted with a key in the phone's secure hardware (its separate security chip, StrongBox, when the phone has one) and only ever sent to your own mail servers. They're never shown again after you save them.
 - **Gmail** goes through Google's standard mail servers only (imap.gmail.com and smtp.gmail.com) with an app password: no Google app, library or sign-in service is built in.
 - **Encrypted connections** (SSL/TLS or STARTTLS) are checked like a browser does. A server whose certificate the phone doesn't trust is refused unless you trust that exact certificate yourself. STARTTLS is required, never optional: a server that suddenly stops offering it is refused rather than used unencrypted. "None" is only for servers on your own network or over a VPN.
@@ -268,4 +283,4 @@ Native Android apps for self-hosted services and everyday tools, all with the sa
 
 MailCtrl is licensed under the [GNU General Public License v3.0](LICENSE). © VKNXWorks
 
-MailCtrl uses JavaMail for Android (Eclipse Distribution License 1.0 / GPLv2 with Classpath Exception). The Space Grotesk and JetBrains Mono fonts are licensed under the SIL Open Font License 1.1; see `FONT-LICENSE-SpaceGrotesk.txt` and `FONT-LICENSE-JetBrainsMono.txt`.
+MailCtrl uses JavaMail for Android (Eclipse Distribution License 1.0 / GPLv2 with Classpath Exception) and Bouncy Castle for OpenPGP (Bouncy Castle Licence, an MIT-style licence). The Space Grotesk and JetBrains Mono fonts are licensed under the SIL Open Font License 1.1; see `FONT-LICENSE-SpaceGrotesk.txt` and `FONT-LICENSE-JetBrainsMono.txt`.
