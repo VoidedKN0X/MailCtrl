@@ -12,6 +12,10 @@ Built and checked by CI only: nothing in this section has been run on a phone.
 
 - **A lighter start.** The list of your accounts (a small file, and decoding it) was read on the main thread before anything else could happen, at every start of MailCtrl, also the background ones for a mail check or a push. It is now read on a separate thread while the rest of the app starts. Everything that uses the list waits until it has been read, so MailCtrl can never mistake "not read yet" for "no accounts" and show the welcome screen.
 
+### Fixed
+
+- **"Mark as read" and "Delete" on a notification are more reliable on a slow connection.** Tapping one of them used to sign in to the mail server and do the work inside the few seconds Android gives a notification button; on a slow or unreachable server Android could stop MailCtrl first and the action was lost. The notification still disappears at once, and the work is now handed to a short background job (the same kind that checks for new mail), which starts right away and isn't cut off. Nothing else changes: if the server can't be reached the action isn't repeated later, as before. The job's details (account, folder and message number) are kept by Android's job queue in MailCtrl's private storage until it has run.
+
 ## v0.3.0 (2026-11-20)
 
 **This release encrypts some of what the app stores on the phone. An older version cannot read it afterwards, so export or back up anything you need before you update (details below).** Built and checked by CI only: nothing in this release had been run on a phone when it was published.
