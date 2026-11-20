@@ -34,6 +34,35 @@ internal data class SealedHeader(
     val s: String = "",
 )
 
+/** The part of one folder's message list that is on screen. */
+class FolderPage(
+    val headers: List<MessageHeader>,
+    /** The oldest message number the page reaches down to (0: everything); null while the folder is empty. */
+    val floorUid: Long?,
+    /** The phone has older messages of this folder below the page. */
+    val olderCached: Boolean,
+    /** Unread messages in the whole folder, as cached (not only on the page). */
+    val unread: Int,
+)
+
+/** How often each folder's message list changed; see [MailCache.listVersions]. */
+class ListVersions(private val all: Int = 0, private val folders: Map<String, Int> = emptyMap()) {
+    /** Changes whenever the list of [folder] in [accountId] did. */
+    fun of(accountId: String, folder: String): Int = all + (folders[key(accountId, folder)] ?: 0)
+
+    /** Changes whenever the list of [folder] in any of [accountIds] did. */
+    fun of(accountIds: List<String>, folder: String): Int = all + accountIds.sumOf { folders[key(it, folder)] ?: 0 }
+
+    internal fun bump(accountId: String, folder: String): ListVersions {
+        val k = key(accountId, folder)
+        return ListVersions(all, folders + (k to (folders[k] ?: 0) + 1))
+    }
+
+    internal fun bumpAll(): ListVersions = ListVersions(all + 1, folders)
+
+    private fun key(accountId: String, folder: String) = accountId + "\n" + folder
+}
+
 /**
  * The message lists and folders last seen on your servers, kept on the phone so MailCtrl opens instantly and
  * shows something without a connection. Only headers (sender, subject, date, flags): the messages themselves
@@ -69,6 +98,25 @@ class MailCache(
 
     // Changes come from several threads at once: count every one of them.
     private fun changed() { _version.update { it + 1 } }
+
+    private val _lists = MutableStateFlow(ListVersions())
+    /**
+     * Goes up per folder when that folder's message list changes, so a list on screen only reads again when
+     * its own folder changed (and not for every write to any other folder or account).
+     */
+    val listVersions: StateFlow<ListVersions> = _lists.asStateFlow()
+
+    /** The message list of one folder changed. */
+    private fun changed(accountId: String, folder: String) {
+        _lists.update { it.bump(accountId, folder) }
+        changed()
+    }
+
+    /** Message lists of many folders changed at once (an account or everything was cleared). */
+    private fun changedEverywhere() {
+        _lists.update { it.bumpAll() }
+        changed()
+    }
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -300,6 +348,58 @@ class MailCache(
         query("SELECT $cols FROM messages WHERE account = ? AND folder = ? ORDER BY uid DESC", arrayOf(accountId, folder))
     }
 
+    /**
+     * The part of a folder's list that is on screen: from the newest message down to [floorUid], or the newest
+     * [first] messages when no floor was chosen yet (null). The lists only read (and decrypt) this part again
+     * when the folder changes, however many older messages the phone has of it.
+     */
+    suspend fun page(accountId: String, folder: String, floorUid: Long?, first: Int): FolderPage = withContext(Dispatchers.IO) {
+        val headers = if (floorUid == null) {
+            query("SELECT $cols FROM messages WHERE account = ? AND folder = ? ORDER BY uid DESC LIMIT $first", arrayOf(accountId, folder))
+        } else {
+            query(
+                "SELECT $cols FROM messages WHERE account = ? AND folder = ? AND uid >= ? ORDER BY uid DESC",
+                arrayOf(accountId, folder, floorUid.toString()),
+            )
+        }
+        val floor = floorUid ?: headers.lastOrNull()?.uid
+        val db = readableDatabase
+        val older = floor != null && db.rawQuery(
+            "SELECT 1 FROM messages WHERE account = ? AND folder = ? AND uid < ? LIMIT 1",
+            arrayOf(accountId, folder, floor.toString()),
+        ).use { c -> c.moveToFirst() }
+        val unread = db.rawQuery(
+            "SELECT COUNT(*) FROM messages WHERE account = ? AND folder = ? AND seen = 0",
+            arrayOf(accountId, folder),
+        ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+        FolderPage(headers, floor, older, unread)
+    }
+
+    /**
+     * Where the list should end to show [count] more of the messages the phone already has below [floorUid]:
+     * the number of the [count]th message below it, or 0 (everything) when there are fewer.
+     */
+    suspend fun floorBelow(accountId: String, folder: String, floorUid: Long, count: Int): Long = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery(
+            "SELECT uid FROM messages WHERE account = ? AND folder = ? AND uid < ? ORDER BY uid DESC LIMIT 1 OFFSET ${count - 1}",
+            arrayOf(accountId, folder, floorUid.toString()),
+        ).use { c -> if (c.moveToFirst()) c.getLong(0) else 0L }
+    }
+
+    /** The newest [limit] messages of a folder ([unreadOnly]: of its unread ones), newest first. */
+    suspend fun newest(accountId: String, folder: String, limit: Int, unreadOnly: Boolean = false): List<MessageHeader> = withContext(Dispatchers.IO) {
+        val unread = if (unreadOnly) " AND seen = 0" else ""
+        query("SELECT $cols FROM messages WHERE account = ? AND folder = ?$unread ORDER BY uid DESC LIMIT $limit", arrayOf(accountId, folder))
+    }
+
+    /** The number of the oldest message the phone has of a folder, or null when it has none. */
+    suspend fun oldestUid(accountId: String, folder: String): Long? = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery(
+            "SELECT MIN(uid) FROM messages WHERE account = ? AND folder = ?",
+            arrayOf(accountId, folder),
+        ).use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+    }
+
     /** Every account's inbox together, newest first. */
     suspend fun unifiedInbox(accountIds: List<String>, limit: Int = 600): List<MessageHeader> = withContext(Dispatchers.IO) {
         if (accountIds.isEmpty()) return@withContext emptyList()
@@ -331,7 +431,7 @@ class MailCache(
         } finally {
             db.endTransaction()
         }
-        changed()
+        changed(accountId, folder)
     }
 
     /** Older messages ("Load more"), added below what's cached. */
@@ -346,6 +446,8 @@ class MailCache(
         } finally {
             db.endTransaction()
         }
+        // Usually one folder; each one's list reads again.
+        headers.map { it.accountId to it.folder }.distinct().forEach { (a, f) -> _lists.update { it.bump(a, f) } }
         changed()
     }
 
@@ -363,12 +465,12 @@ class MailCache(
             uids.chunked(400).forEach { chunk ->
                 db.update("messages", v, "account = ? AND folder = ? AND uid IN (${chunk.joinToString(",")})", arrayOf(accountId, folder))
             }
-            changed()
+            changed(accountId, folder)
         }
 
     suspend fun markFolderRead(accountId: String, folder: String) = withContext(Dispatchers.IO) {
         writableDatabase.update("messages", ContentValues().apply { put("seen", 1) }, "account = ? AND folder = ?", arrayOf(accountId, folder))
-        changed()
+        changed(accountId, folder)
     }
 
     suspend fun remove(accountId: String, folder: String, uids: Collection<Long>) = withContext(Dispatchers.IO) {
@@ -377,12 +479,12 @@ class MailCache(
         uids.chunked(400).forEach { chunk ->
             db.delete("messages", "account = ? AND folder = ? AND uid IN (${chunk.joinToString(",")})", arrayOf(accountId, folder))
         }
-        changed()
+        changed(accountId, folder)
     }
 
     suspend fun clearFolder(accountId: String, folder: String) = withContext(Dispatchers.IO) {
         writableDatabase.delete("messages", "account = ? AND folder = ?", arrayOf(accountId, folder))
-        changed()
+        changed(accountId, folder)
     }
 
     // ------------------------------------------------------------------ syncing
@@ -451,7 +553,7 @@ class MailCache(
             db.endTransaction()
         }
         // Nothing changed (the usual case): the lists on screen don't need to read again.
-        if (sync.reset || sync.removed.isNotEmpty() || sync.fresh.isNotEmpty() || flagChanges > 0) changed()
+        if (sync.reset || sync.removed.isNotEmpty() || sync.fresh.isNotEmpty() || flagChanges > 0) changed(accountId, folder)
     }
 
     // ------------------------------------------------------------------ folders
@@ -519,6 +621,14 @@ class MailCache(
         ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
     }
 
+    /** Unread messages in every account's inbox, as cached, in one query. Accounts without any aren't in the map. */
+    suspend fun inboxUnreadByAccount(): Map<String, Int> = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery(
+            "SELECT account, COUNT(*) FROM messages WHERE folder = 'INBOX' AND seen = 0 GROUP BY account",
+            null,
+        ).use { c -> buildMap { while (c.moveToNext()) put(c.getString(0), c.getInt(1)) } }
+    }
+
     // ------------------------------------------------------------------ accounts
 
     suspend fun clearAccount(accountId: String) = withContext(Dispatchers.IO) {
@@ -526,7 +636,7 @@ class MailCache(
         db.delete("messages", "account = ?", arrayOf(accountId))
         db.delete("folders", "account = ?", arrayOf(accountId))
         db.delete("folder_sync", "account = ?", arrayOf(accountId))
-        changed()
+        changedEverywhere()
     }
 
     suspend fun clearAll() = withContext(Dispatchers.IO) {
@@ -534,7 +644,7 @@ class MailCache(
         db.delete("messages", null, null)
         db.delete("folders", null, null)
         db.delete("folder_sync", null, null)
-        changed()
+        changedEverywhere()
     }
 
     private companion object {

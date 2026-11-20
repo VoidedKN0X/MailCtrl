@@ -58,8 +58,8 @@ class MailActions(
     private fun readAhead(accountId: String, folder: String) {
         scope.launch {
             runCatching {
-                val list = cache.messages(accountId, folder)
-                val wanted = if (mail.keepsCopies) list.take(AHEAD) else list.asSequence().filter { !it.seen }.take(READ_AHEAD).toList()
+                // Only the few that are wanted are read from the list, not the whole folder.
+                val wanted = if (mail.keepsCopies) cache.newest(accountId, folder, AHEAD) else cache.newest(accountId, folder, READ_AHEAD, unreadOnly = true)
                 mail.prefetch(accountId, folder, wanted)
             }
         }
@@ -79,7 +79,7 @@ class MailActions(
 
     /** Older messages below what's shown. Returns whether there are more still. */
     suspend fun loadMore(accountId: String, folder: String): Boolean {
-        val oldest = cache.messages(accountId, folder).minOfOrNull { it.uid } ?: run {
+        val oldest = cache.oldestUid(accountId, folder) ?: run {
             refresh(accountId, folder)
             return true
         }

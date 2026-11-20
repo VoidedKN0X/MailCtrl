@@ -35,6 +35,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ import com.vknxworks.mailctrl.data.MailActions
 import com.vknxworks.mailctrl.data.accounts.Account
 import com.vknxworks.mailctrl.mail.FolderRole
 import com.vknxworks.mailctrl.mail.LockedException
+import com.vknxworks.mailctrl.data.cache.FolderPage
 import com.vknxworks.mailctrl.mail.MessageHeader
 import com.vknxworks.mailctrl.mail.PasswordNeededException
 import com.vknxworks.mailctrl.ui.components.ConfirmDialog
@@ -106,6 +108,10 @@ fun inboxSelection(accounts: List<Account>, unifiedSetting: Boolean, chosen: Str
     return InboxSelection(allInboxes, selectedId, inAll, ids)
 }
 
+/** How many of a folder's newest messages its list reads at first, and how many more each time you scroll to its end. */
+private const val SHOWN_FIRST = 200
+private const val SHOWN_MORE = 200
+
 /** A problem refreshing one account, shown above the list. */
 private data class AccountProblem(val accountId: String, val error: Throwable)
 
@@ -136,12 +142,30 @@ fun InboxScreen() {
     }
     // Unread in each inbox, as on the phone: the chips show them, and "All inboxes" adds up the accounts in it.
     val unreadByAccount by produceState(emptyMap<String, Int>(), version, accounts) {
-        value = accounts.associate { it.id to c.cache.inboxUnread(listOf(it.id)) }
+        val counts = c.cache.inboxUnreadByAccount()
+        value = accounts.associate { it.id to (counts[it.id] ?: 0) }
     }
 
-    val headers by produceState<List<MessageHeader>?>(null, version, ids) {
-        value = if (selectedId == null) c.cache.unifiedInbox(ids) else c.cache.messages(selectedId, MailActions.INBOX)
+    // One account's inbox is read from its newest message down to a floor: the newest SHOWN_FIRST at first, and
+    // further down as you scroll, so a change doesn't read (and decrypt) every message the phone has of it.
+    // The list only reads again when one of the inboxes it shows changed.
+    val lists by c.cache.listVersions.collectAsStateWithLifecycle()
+    val listVersion = lists.of(ids, MailActions.INBOX)
+    var floor by rememberSaveable(selectedId) { mutableStateOf<Long?>(null) }
+    var floorMoves by remember(selectedId) { mutableIntStateOf(0) }
+    var movingFloor by remember(selectedId) { mutableStateOf(false) }
+    val page by produceState<FolderPage?>(null, listVersion, ids, floorMoves) {
+        value = if (selectedId == null) {
+            FolderPage(c.cache.unifiedInbox(ids), null, false, 0)
+        } else {
+            val p = c.cache.page(selectedId, MailActions.INBOX, floor, SHOWN_FIRST)
+            if (floor == null) floor = p.floorUid
+            p
+        }
     }
+    val headers = page?.headers
+    // Older messages of this inbox that are already on the phone, below what the list shows.
+    val olderOnPhone = selectedId != null && page?.olderCached == true
     var refreshing by remember { mutableStateOf(false) }
     val problems = remember { mutableStateListOf<AccountProblem>() }
     val hasMore = remember { mutableStateMapOf<String, Boolean>() }
@@ -165,9 +189,27 @@ fun InboxScreen() {
 
     fun loadMore() {
         if (loadingMore) return
+        val current = page
+        val from = floor
+        if (selectedId != null && current != null && current.olderCached && from != null) {
+            // What the phone already has comes first; the server is only asked once that has run out.
+            if (movingFloor || current.floorUid != from) return
+            movingFloor = true
+            scope.launch {
+                try {
+                    floor = c.cache.floorBelow(selectedId, MailActions.INBOX, from, SHOWN_MORE)
+                    floorMoves++
+                } finally {
+                    movingFloor = false
+                }
+            }
+            return
+        }
         val more = ids.filter { hasMore[it] != false }
         if (more.isEmpty()) return
         loadingMore = true
+        // The list is at the end of what the phone has: what the server sends now goes below it and is shown.
+        if (selectedId != null && floor != null) floor = 0L
         scope.launch {
             coroutineScope {
                 more.map { id -> async { id to runCatching { c.actions.loadMore(id, MailActions.INBOX) }.getOrDefault(false) } }.awaitAll()
@@ -187,7 +229,7 @@ fun InboxScreen() {
     val access = rememberNotificationAccess()
     LaunchedEffect(Unit) { if (c.settings.current().notifyEnabled) access.askOnce() }
 
-    val unread = headers?.count { !it.seen } ?: 0
+    val unread = if (selectedId != null) page?.unread ?: 0 else headers?.count { !it.seen } ?: 0
     val listState = rememberLazyListState()
     val expandedFab by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     val names = remember(accounts, selectedId) {
@@ -234,7 +276,7 @@ fun InboxScreen() {
                 accountNames = names,
                 refreshing = refreshing || headers == null,
                 onRefresh = { refresh() },
-                hasMore = ids.any { hasMore[it] != false },
+                hasMore = olderOnPhone || ids.any { hasMore[it] != false },
                 loadingMore = loadingMore,
                 onLoadMore = ::loadMore,
                 selection = selection,
@@ -319,7 +361,19 @@ fun FolderScreen(accountId: String, folder: String) {
     val nav = LocalNavigator.current
     val scope = rememberCoroutineScope()
     val version by c.cache.version.collectAsStateWithLifecycle()
-    val headers by produceState<List<MessageHeader>?>(null, version, accountId, folder) { value = c.cache.messages(accountId, folder) }
+    // Read from the newest message down to a floor that moves down as you scroll (see InboxScreen), and only
+    // again when this folder's list changed.
+    val lists by c.cache.listVersions.collectAsStateWithLifecycle()
+    val listVersion = lists.of(accountId, folder)
+    var floor by rememberSaveable(accountId, folder) { mutableStateOf<Long?>(null) }
+    var floorMoves by remember(accountId, folder) { mutableIntStateOf(0) }
+    var movingFloor by remember(accountId, folder) { mutableStateOf(false) }
+    val page by produceState<FolderPage?>(null, listVersion, accountId, folder, floorMoves) {
+        val p = c.cache.page(accountId, folder, floor, SHOWN_FIRST)
+        if (floor == null) floor = p.floorUid
+        value = p
+    }
+    val headers = page?.headers
     val info by produceState<com.vknxworks.mailctrl.mail.FolderInfo?>(null, version, accountId, folder) {
         value = c.cache.folders(accountId).firstOrNull { it.fullName == folder }
     }
@@ -342,8 +396,27 @@ fun FolderScreen(accountId: String, folder: String) {
     }
 
     fun loadMore() {
-        if (loadingMore || !hasMore) return
+        if (loadingMore) return
+        val current = page
+        val from = floor
+        if (current != null && current.olderCached && from != null) {
+            // What the phone already has comes first; the server is only asked once that has run out.
+            if (movingFloor || current.floorUid != from) return
+            movingFloor = true
+            scope.launch {
+                try {
+                    floor = c.cache.floorBelow(accountId, folder, from, SHOWN_MORE)
+                    floorMoves++
+                } finally {
+                    movingFloor = false
+                }
+            }
+            return
+        }
+        if (!hasMore) return
         loadingMore = true
+        // The list is at the end of what the phone has: what the server sends now goes below it and is shown.
+        if (floor != null) floor = 0L
         scope.launch {
             runCatching { c.actions.loadMore(accountId, folder) }
                 .onSuccess { hasMore = it }
@@ -357,7 +430,7 @@ fun FolderScreen(accountId: String, folder: String) {
     val f = info
     val title = f?.let { folderName(it) } ?: folder.substringAfterLast('/')
     val role = f?.role ?: FolderRole.OTHER
-    val unread = headers?.count { !it.seen } ?: 0
+    val unread = page?.unread ?: 0
 
     Column(Modifier.fillMaxSize()) {
         if (selection.isEmpty()) {
@@ -382,7 +455,7 @@ fun FolderScreen(accountId: String, folder: String) {
             accountNames = null,
             refreshing = refreshing || headers == null,
             onRefresh = { refresh() },
-            hasMore = hasMore,
+            hasMore = hasMore || page?.olderCached == true,
             loadingMore = loadingMore,
             onLoadMore = ::loadMore,
             selection = selection,
