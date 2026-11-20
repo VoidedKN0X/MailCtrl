@@ -218,8 +218,41 @@ class AccountStore(context: Context, private val vault: LockVault) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutex = Mutex()
 
-    private val _accounts = MutableStateFlow(load())
-    val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
+    // Reading the list (a file read and decoding its JSON) used to hold up every start of MailCtrl, also the
+    // background ones for a mail check or a push. It now starts on a thread of its own the moment the app
+    // starts. Nothing ever sees the list before it is read: every way in ([accounts], [get], [anySealed] and
+    // every change) goes through [ensureLoaded], which waits for the read to finish (or does it itself when it
+    // hasn't begun). So the app can't take "not read yet" for "no accounts" and show the welcome screen.
+    private val _accounts = MutableStateFlow<List<Account>>(emptyList())
+    private val accountsFlow = _accounts.asStateFlow()
+    private val loadLock = Any()
+    @Volatile private var loaded = false
+
+    init {
+        Thread({ runCatching { ensureLoaded() } }, "accounts-load").start()
+    }
+
+    private fun ensureLoaded() {
+        if (loaded) return
+        synchronized(loadLock) {
+            if (!loaded) {
+                _accounts.value = load()
+                loaded = true
+            }
+        }
+    }
+
+    /** The list, once it has been read. */
+    private fun current(): List<Account> {
+        ensureLoaded()
+        return _accounts.value
+    }
+
+    val accounts: StateFlow<List<Account>>
+        get() {
+            ensureLoaded()
+            return accountsFlow
+        }
 
     /**
      * Whether passwords are sealed with the app PIN as well. Set by the app: only while the app lock is on and
@@ -233,11 +266,12 @@ class AccountStore(context: Context, private val vault: LockVault) {
     }.orEmpty()
 
     private fun save(list: List<Account>) {
+        ensureLoaded()
         prefs.edit().putString(KEY, json.encodeToString(ListSerializer(Account.serializer()), list)).commit()
         _accounts.value = list
     }
 
-    fun get(id: String): Account? = _accounts.value.firstOrNull { it.id == id }
+    fun get(id: String): Account? = current().firstOrNull { it.id == id }
 
     /** The password, or null while it's sealed and MailCtrl is locked (or when there's none: see [needsPassword]). */
     fun password(account: Account): String? {
@@ -250,7 +284,7 @@ class AccountStore(context: Context, private val vault: LockVault) {
     fun needsPassword(account: Account): Boolean = account.secretEnc.isEmpty()
 
     /** A password can't be read right now (sealed, and MailCtrl is locked). */
-    fun anySealed(): Boolean = _accounts.value.any { a ->
+    fun anySealed(): Boolean = current().any { a ->
         a.secretEnc.isNotEmpty() && KeystoreCrypto.decrypt(a.secretEnc)?.let(LockVault::isSealed) == true
     }
 
@@ -265,20 +299,20 @@ class AccountStore(context: Context, private val vault: LockVault) {
     /** Adds [account] with [password], or replaces the account with the same id. */
     suspend fun put(account: Account, password: String?) = change {
         val stored = if (password != null) account.copy(secretEnc = wrap(password)) else account
-        val list = _accounts.value
+        val list = current()
         save(if (list.any { it.id == stored.id }) list.map { if (it.id == stored.id) stored else it } else list + stored)
     }
 
     suspend fun update(id: String, transform: (Account) -> Account) = change {
-        save(_accounts.value.map { if (it.id == id) transform(it) else it })
+        save(current().map { if (it.id == id) transform(it) else it })
     }
 
     suspend fun remove(id: String) = change {
-        save(_accounts.value.filterNot { it.id == id })
+        save(current().filterNot { it.id == id })
     }
 
     suspend fun move(id: String, up: Boolean) = change {
-        val list = _accounts.value.toMutableList()
+        val list = current().toMutableList()
         val i = list.indexOfFirst { it.id == id }
         val j = if (up) i - 1 else i + 1
         if (i < 0 || j !in list.indices) return@change
@@ -293,7 +327,7 @@ class AccountStore(context: Context, private val vault: LockVault) {
     suspend fun applySealing() = change {
         val seal = sealPolicy()
         save(
-            _accounts.value.map { a ->
+            current().map { a ->
                 if (a.secretEnc.isEmpty()) return@map a
                 val plain = KeystoreCrypto.decrypt(a.secretEnc) ?: return@map a
                 val sealed = LockVault.isSealed(plain)
@@ -312,7 +346,7 @@ class AccountStore(context: Context, private val vault: LockVault) {
      */
     suspend fun dropSealed() = change {
         save(
-            _accounts.value.map { a ->
+            current().map { a ->
                 val plain = a.secretEnc.takeIf { it.isNotEmpty() }?.let(KeystoreCrypto::decrypt)
                 if (plain != null && LockVault.isSealed(plain)) a.copy(secretEnc = "") else a
             },

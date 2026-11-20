@@ -4,6 +4,14 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## Unreleased
+
+Built and checked by CI only: nothing in this section has been run on a phone.
+
+### Changed
+
+- **A lighter start.** The list of your accounts (a small file, and decoding it) was read on the main thread before anything else could happen, at every start of MailCtrl, also the background ones for a mail check or a push. It is now read on a separate thread while the rest of the app starts. Everything that uses the list waits until it has been read, so MailCtrl can never mistake "not read yet" for "no accounts" and show the welcome screen.
+
 ## v0.3.0 (2026-11-20)
 
 **This release encrypts some of what the app stores on the phone. An older version cannot read it afterwards, so export or back up anything you need before you update (details below).** Built and checked by CI only: nothing in this release had been run on a phone when it was published.
