@@ -7,11 +7,11 @@
     android:viewportHeight="108">
     <!-- Keycap body -->
     <path
-        android:fillColor="#FF1C1C21"
+        android:fillColor="#FF2B3038"
         android:pathData="M37,31 H71 A13,13 0 0 1 84,44 V65 A13,13 0 0 1 71,78 H37 A13,13 0 0 1 24,65 V44 A13,13 0 0 1 37,31 Z" />
     <!-- Key face -->
     <path
-        android:fillColor="#FF141417"
+        android:fillColor="#FF1A1D23"
         android:strokeColor="#FFB48CFF"
         android:strokeWidth="3"
         android:pathData="M37,32 H71 A9,9 0 0 1 80,41 V57 A9,9 0 0 1 71,66 H37 A9,9 0 0 1 28,57 V41 A9,9 0 0 1 37,32 Z" />
@@ -30,7 +30,7 @@
         android:pathData="M41,42 L54,51 L67,42" />
     <!-- Bar on the front of the key -->
     <path
-        android:strokeColor="#FF2A2A2F"
+        android:strokeColor="#FF5A616C"
         android:strokeWidth="3"
         android:strokeLineCap="round"
         android:pathData="M47,72.5 H61" />

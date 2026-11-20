@@ -4,6 +4,12 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.2.1 (2026-11-20)
+
+### Changed
+
+- **The app icon matches the other Ctrl apps.** MailCtrl's icon was drawn in a darker set of greys than the rest of the series: a near-black background, a darker keycap and a front bar you could hardly see. It now uses the same background, keycap and bar colours as the other Ctrl apps, so the icons look like one family side by side. The purple symbol and the themed (monochrome) icon are unchanged.
+
 ## Project updates (2026-11-19)
 
 ### Project
