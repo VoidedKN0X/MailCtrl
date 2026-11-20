@@ -6,6 +6,8 @@ import android.widget.Toast
 import com.vknxworks.mailctrl.data.MailActions
 import com.vknxworks.mailctrl.data.accounts.AccountStore
 import com.vknxworks.mailctrl.data.cache.MailCache
+import com.vknxworks.mailctrl.data.crypto.DataKeyStore
+import com.vknxworks.mailctrl.data.crypto.KeystoreKeyWrapper
 import com.vknxworks.mailctrl.data.drafts.Draft
 import com.vknxworks.mailctrl.data.drafts.DraftStore
 import com.vknxworks.mailctrl.data.lock.LockVault
@@ -54,7 +56,8 @@ class AppContainer(val context: Context) {
     val vault = LockVault(context, "mailctrl")
     val accounts = AccountStore(context, vault)
     // Made when first needed, so starting the app (or a background check) doesn't open what it won't use.
-    val cache by lazy { MailCache(context) }
+    // The data key encrypts the message list at rest; it's only read (off the main thread) when the list is.
+    val cache by lazy { MailCache(context, DataKeyStore(context.noBackupFilesDir, KeystoreKeyWrapper()), appScope) }
     /** Messages kept on the phone, encrypted, so they open without the server. */
     val messages by lazy { com.vknxworks.mailctrl.mail.MessageStore(context) }
     val mail by lazy { MailClient(context, accounts, messages) }

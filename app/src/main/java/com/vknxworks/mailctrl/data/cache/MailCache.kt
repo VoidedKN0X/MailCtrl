@@ -5,30 +5,63 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import com.vknxworks.mailctrl.data.crypto.DataKeyStore
+import com.vknxworks.mailctrl.data.crypto.SealedFile
 import com.vknxworks.mailctrl.mail.Address
 import com.vknxworks.mailctrl.mail.FolderInfo
 import com.vknxworks.mailctrl.mail.FolderRole
 import com.vknxworks.mailctrl.mail.FolderSync
 import com.vknxworks.mailctrl.mail.KnownRange
 import com.vknxworks.mailctrl.mail.MessageHeader
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+
+/** Who a listed message is from and to, and its subject: what is encrypted together, per message. */
+@Serializable
+internal data class SealedHeader(
+    val n: String? = null,
+    val e: String? = null,
+    val t: List<Address> = emptyList(),
+    val s: String = "",
+)
 
 /**
  * The message lists and folders last seen on your servers, kept on the phone so MailCtrl opens instantly and
  * shows something without a connection. Only headers (sender, subject, date, flags): the messages themselves
  * are fetched from the server when you open them.
+ *
+ * Sender, recipients and subject are encrypted per message with the data key ([dataKey], [SealedFile]): the
+ * `subject` column then holds one sealed BLOB with all of them, and `from_name`, `from_email` and `to_json` are
+ * NULL. A row whose `subject` is text is from before encryption (or was written while there was no key) and is
+ * read as it is; such rows are sealed in the background ([sealOrdinaryRows]). The database itself, the account
+ * ids, folder names, message numbers, dates, sizes and flags are not encrypted: the queries sort and filter on
+ * them. Never use the sealed columns in SQL (WHERE, ORDER BY, an index).
+ *
+ * This is only a cache: a sealed row that can't be opened (the key is gone) is removed, and comes back from
+ * the server with the next refresh.
  */
-class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", null, 3) {
+class MailCache(
+    context: Context,
+    private val dataKey: DataKeyStore,
+    scope: CoroutineScope,
+) : SQLiteOpenHelper(context, "mailcache.db", null, 3) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val addrList = ListSerializer(Address.serializer())
+
+    init {
+        // Lists from before encryption are sealed in the background, the first time the cache is used.
+        scope.launch { runCatching { sealOrdinaryRows() } }
+    }
 
     /** Goes up on every change, so lists on screen read again. */
     private val _version = MutableStateFlow(0)
@@ -86,31 +119,77 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
 
     // ------------------------------------------------------------------ messages
 
-    private fun Cursor.toHeader(): MessageHeader = MessageHeader(
-        accountId = getString(0),
-        folder = getString(1),
-        uid = getLong(2),
-        from = getString(4)?.let { Address(getString(3).orEmpty(), it) },
-        to = getString(5)?.let { runCatching { json.decodeFromString(addrList, it) }.getOrNull() }.orEmpty(),
-        subject = getString(6).orEmpty(),
-        date = getLong(7),
-        seen = getInt(8) != 0,
-        flagged = getInt(9) != 0,
-        answered = getInt(10) != 0,
-        hasAttachments = getInt(11) != 0,
-        size = getLong(12),
-    )
+    /**
+     * The data key, made the first time it's needed; null when there is none to be had (rows are then written
+     * as before encryption). Asks the secure hardware the first time: only ever called on a background thread.
+     */
+    private fun key(): ByteArray? = runCatching { dataKey.get(create = true) }.getOrNull()
+
+    /** Sender, recipients and subject sealed together, checked by opening them again; null when that fails. */
+    private fun seal(key: ByteArray, plain: SealedHeader): ByteArray? = runCatching {
+        SealedFile.sealChecked(key, json.encodeToString(SealedHeader.serializer(), plain).toByteArray(Charsets.UTF_8))
+    }.getOrNull()
+
+    private fun parseTo(stored: String?): List<Address> =
+        stored?.let { runCatching { json.decodeFromString(addrList, it) }.getOrNull() }.orEmpty()
+
+    /** The row as a header, or null for a sealed row that can't be opened (no key, or not this key). */
+    private fun Cursor.toHeader(key: ByteArray?): MessageHeader? {
+        val fromName: String?
+        val fromEmail: String?
+        val to: List<Address>
+        val subject: String
+        if (getType(6) == Cursor.FIELD_TYPE_BLOB) {
+            if (key == null) return null
+            val opened = runCatching {
+                json.decodeFromString(SealedHeader.serializer(), String(SealedFile.open(key, getBlob(6)), Charsets.UTF_8))
+            }.getOrNull() ?: return null
+            fromName = opened.n
+            fromEmail = opened.e
+            to = opened.t
+            subject = opened.s
+        } else {
+            // From before encryption, or written while there was no key.
+            fromName = getString(3)
+            fromEmail = getString(4)
+            to = parseTo(getString(5))
+            subject = getString(6).orEmpty()
+        }
+        return MessageHeader(
+            accountId = getString(0),
+            folder = getString(1),
+            uid = getLong(2),
+            from = fromEmail?.let { Address(fromName.orEmpty(), it) },
+            to = to,
+            subject = subject,
+            date = getLong(7),
+            seen = getInt(8) != 0,
+            flagged = getInt(9) != 0,
+            answered = getInt(10) != 0,
+            hasAttachments = getInt(11) != 0,
+            size = getLong(12),
+        )
+    }
 
     private val cols = "account, folder, uid, from_name, from_email, to_json, subject, date, seen, flagged, answered, attach, size"
 
-    private fun values(h: MessageHeader) = ContentValues().apply {
+    /** The row for [h]: sealed with [key], or as before encryption when there's no key (or sealing failed). */
+    private fun values(h: MessageHeader, key: ByteArray?) = ContentValues().apply {
         put("account", h.accountId)
         put("folder", h.folder)
         put("uid", h.uid)
-        put("from_name", h.from?.name)
-        put("from_email", h.from?.email)
-        put("to_json", json.encodeToString(addrList, h.to))
-        put("subject", h.subject)
+        val sealed = key?.let { seal(it, SealedHeader(h.from?.name, h.from?.email, h.to, h.subject)) }
+        if (sealed != null) {
+            putNull("from_name")
+            putNull("from_email")
+            putNull("to_json")
+            put("subject", sealed)
+        } else {
+            put("from_name", h.from?.name)
+            put("from_email", h.from?.email)
+            put("to_json", json.encodeToString(addrList, h.to))
+            put("subject", h.subject)
+        }
         put("date", h.date)
         put("seen", if (h.seen) 1 else 0)
         put("flagged", if (h.flagged) 1 else 0)
@@ -119,8 +198,103 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
         put("size", h.size)
     }
 
-    private fun query(sql: String, args: Array<String>): List<MessageHeader> =
-        readableDatabase.rawQuery(sql, args).use { c -> buildList { while (c.moveToNext()) add(c.toHeader()) } }
+    private fun query(sql: String, args: Array<String>): List<MessageHeader> {
+        val key = key()
+        val unreadable = ArrayList<Triple<String, String, Long>>()
+        val list = readableDatabase.rawQuery(sql, args).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    val h = c.toHeader(key)
+                    if (h != null) add(h) else unreadable.add(Triple(c.getString(0), c.getString(1), c.getLong(2)))
+                }
+            }
+        }
+        if (unreadable.isNotEmpty()) dropUnreadable(unreadable)
+        return list
+    }
+
+    /**
+     * Sealed rows that can't be opened are of no use: they're removed, so the next refresh of their folder
+     * downloads those messages' details again (as it does for any message the list doesn't have). They were
+     * already left out of what's shown, so the lists on screen don't need to read again.
+     */
+    private fun dropUnreadable(rows: List<Triple<String, String, Long>>) {
+        runCatching {
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                rows.forEach { (account, folder, uid) ->
+                    db.delete(
+                        "messages",
+                        "account = ? AND folder = ? AND uid = ? AND typeof(subject) = 'blob'",
+                        arrayOf(account, folder, uid.toString()),
+                    )
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        }
+    }
+
+    /**
+     * Seals the rows that are still ordinary text (lists from before encryption, or written while there was no
+     * key), a couple of hundred at a time, each batch in its own transaction: a row is either still ordinary or
+     * sealed, never in between, and stopping halfway just leaves the rest for the next start. Nothing changes
+     * in what the lists show. Afterwards the database file is rewritten once, so the old text doesn't linger
+     * in its unused pages. Without a key it does nothing.
+     */
+    private suspend fun sealOrdinaryRows(): Unit = withContext(Dispatchers.IO) {
+        val key = key() ?: return@withContext
+        val db = writableDatabase
+        var sealedAny = false
+        while (true) {
+            var done = 0
+            db.beginTransaction()
+            try {
+                val rows = db.rawQuery(
+                    "SELECT account, folder, uid, from_name, from_email, to_json, subject FROM messages WHERE typeof(subject) != 'blob' LIMIT $SEAL_BATCH",
+                    null,
+                ).use { c ->
+                    buildList {
+                        while (c.moveToNext()) {
+                            add(
+                                OrdinaryRow(
+                                    account = c.getString(0),
+                                    folder = c.getString(1),
+                                    uid = c.getLong(2),
+                                    header = SealedHeader(c.getString(3), c.getString(4), parseTo(c.getString(5)), c.getString(6).orEmpty()),
+                                ),
+                            )
+                        }
+                    }
+                }
+                for (r in rows) {
+                    val sealed = seal(key, r.header) ?: continue
+                    done += db.update(
+                        "messages",
+                        ContentValues().apply {
+                            putNull("from_name")
+                            putNull("from_email")
+                            putNull("to_json")
+                            put("subject", sealed)
+                        },
+                        "account = ? AND folder = ? AND uid = ? AND typeof(subject) != 'blob'",
+                        arrayOf(r.account, r.folder, r.uid.toString()),
+                    )
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            // Nothing left, or nothing more that can be sealed.
+            if (done == 0) break
+            sealedAny = true
+        }
+        if (sealedAny) runCatching { db.execSQL("VACUUM") }
+    }
+
+    private class OrdinaryRow(val account: String, val folder: String, val uid: Long, val header: SealedHeader)
 
     suspend fun messages(accountId: String, folder: String): List<MessageHeader> = withContext(Dispatchers.IO) {
         query("SELECT $cols FROM messages WHERE account = ? AND folder = ? ORDER BY uid DESC", arrayOf(accountId, folder))
@@ -142,6 +316,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
      * them up (so removed messages go too). Older messages loaded before stay.
      */
     suspend fun putNewest(accountId: String, folder: String, headers: List<MessageHeader>, complete: Boolean) = withContext(Dispatchers.IO) {
+        val key = key()
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -151,7 +326,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
             } else {
                 db.delete("messages", "account = ? AND folder = ? AND uid >= ?", arrayOf(accountId, folder, min.toString()))
             }
-            headers.forEach { db.insertWithOnConflict("messages", null, values(it), SQLiteDatabase.CONFLICT_REPLACE) }
+            headers.forEach { db.insertWithOnConflict("messages", null, values(it, key), SQLiteDatabase.CONFLICT_REPLACE) }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -162,10 +337,11 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
     /** Older messages ("Load more"), added below what's cached. */
     suspend fun putOlder(headers: List<MessageHeader>) = withContext(Dispatchers.IO) {
         if (headers.isEmpty()) return@withContext
+        val key = key()
         val db = writableDatabase
         db.beginTransaction()
         try {
-            headers.forEach { db.insertWithOnConflict("messages", null, values(it), SQLiteDatabase.CONFLICT_REPLACE) }
+            headers.forEach { db.insertWithOnConflict("messages", null, values(it, key), SQLiteDatabase.CONFLICT_REPLACE) }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -225,6 +401,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
 
     /** Applies what changed on the server to a folder's list, all at once. */
     suspend fun applySync(accountId: String, folder: String, sync: FolderSync) = withContext(Dispatchers.IO) {
+        val key = if (sync.fresh.isEmpty()) null else key()
         val db = writableDatabase
         var flagChanges = 0
         db.beginTransaction()
@@ -258,7 +435,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
                     )
                 }
             }
-            sync.fresh.forEach { db.insertWithOnConflict("messages", null, values(it), SQLiteDatabase.CONFLICT_REPLACE) }
+            sync.fresh.forEach { db.insertWithOnConflict("messages", null, values(it, key), SQLiteDatabase.CONFLICT_REPLACE) }
             db.insertWithOnConflict(
                 "folder_sync",
                 null,
@@ -358,5 +535,10 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
         db.delete("folders", null, null)
         db.delete("folder_sync", null, null)
         changed()
+    }
+
+    private companion object {
+        /** Rows sealed per transaction when moving a list from before encryption over. */
+        const val SEAL_BATCH = 200
     }
 }

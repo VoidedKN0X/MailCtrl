@@ -31,6 +31,7 @@ Problems in Gmail, Proton Mail, hydroxide or other mail servers themselves shoul
 ## How the app protects you
 
 - Passwords are encrypted with a key in the phone's secure hardware. With the app lock on and notifications off, they're also sealed with your app PIN, so a locked MailCtrl can't read them. Unsent drafts are sealed with the PIN whenever the app lock is on.
+- The list of your messages kept on the phone has each message's sender, recipients and subject encrypted (AES-256-GCM) with a key that is itself protected by the phone's secure hardware; copies of messages kept on the phone are encrypted the same way. Folder names, dates, sizes and read/flagged state in that list are not encrypted, and neither are your account settings (address, server names). This protects files copied off the phone, not against something already running as MailCtrl on an unlocked phone.
 - Certificates are checked like a browser does: the phone must trust them and they must name the server. A self-signed certificate is only accepted after you've compared and trusted its exact fingerprint. STARTTLS is required when chosen, never optional.
 - HTML messages are shown without scripts, forms or frames, and nothing is loaded from the internet unless you tap to load pictures. Links ask before they open in your browser.
 - Other apps can only fill in a new message (a mailto: link or "Share to MailCtrl"); nothing is sent until you tap Send, and another app can't make MailCtrl attach its own private files.
