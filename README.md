@@ -165,7 +165,7 @@ The lock, PIN and sign-in screens are always kept out of screenshots and recordi
 
 ## Check a download
 
-Every release is built from this repo by [the build workflow](.github/workflows/build.yml) on GitHub Actions and signed with the same release key. Android refuses an update signed with a different key, and the CtrlF-Droid repo only accepts APKs signed with this one. Its SHA-256 certificate fingerprint is:
+Every release is built from this repo by [the build workflow](.github/workflows/build.yml) on GitHub Actions and signed with the same release key. Android refuses an update signed with a different key, and the CtrlF-Droid repo only accepts APKs signed with this one. The signing key is kept away from the build: one job builds the APK without any secrets, and a separate job that runs no code from this repo signs it and checks the signature against the fingerprint below. Its SHA-256 certificate fingerprint is:
 
 ```
 E8:0F:B6:89:51:93:44:E1:DB:C9:67:55:55:E4:92:6D:8F:78:1A:D9:CC:48:0C:B9:25:83:5B:4D:F4:9F:50:65

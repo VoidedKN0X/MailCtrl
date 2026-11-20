@@ -21,6 +21,11 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # SHA-256 of MailCtrl's release signing certificate, the one in SECURITY.md and README.md
+  # (lower case, no colons). The sign job refuses to hand on an APK signed with anything else.
+  EXPECTED_CERT_SHA256: e80fb689519344e1dbc9675555e4926d8f781ad9cc480cb925835b4df49f5065
+
 jobs:
   # A release is published only when versionName (and versionCode) in
   # app/build.gradle.kts are bumped. Other pushes just build to check the code.
@@ -42,17 +47,34 @@ jobs:
         id: v
         run: bash .github/scripts/check-version.sh
 
+  # Builds the release APK UNSIGNED. This job runs Gradle, and with it every plugin, dependency and
+  # build script, so it gets no secrets at all: the signing key only exists in the sign job below.
   build:
     needs: version
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # app/build.gradle.kts: build the release without a signing config (app-release-unsigned.apk).
+      UNSIGNED_RELEASE: "true"
     outputs:
-      release_signed: ${{ steps.keystore.outputs.release_signed }}
+      apk_sha256: ${{ steps.pack.outputs.apk_sha256 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
+      - name: Check the documented signing certificate
+        # The fingerprint the sign job enforces must be the one users are told to check.
+        run: |
+          colons=$(echo "$EXPECTED_CERT_SHA256" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          for f in SECURITY.md README.md; do
+            if ! grep -qF "$colons" "$f"; then
+              echo "::error title=Fingerprint mismatch::EXPECTED_CERT_SHA256 in build.yml is not the fingerprint in $f"
+              exit 1
+            fi
+          done
+          echo "build.yml, SECURITY.md and README.md agree on $colons"
 
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
@@ -64,42 +86,23 @@ jobs:
         uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          # No Gradle cache: every build downloads its dependencies fresh and checks them against
+          # gradle/verification-metadata.xml. A cache saved by one run (also by a failed one) was
+          # restored by every later run, so one bad download kept failing builds until the caches
+          # were deleted by hand; and a release must not be built from files an earlier run left behind.
+          cache-disabled: true
 
-      - name: Decode release keystore
-        id: keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            umask 077
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-            echo "release_signed=true" >> "$GITHUB_OUTPUT"
-            echo "Signing with release key"
-          else
-            echo "release_signed=false" >> "$GITHUB_OUTPUT"
-            echo "::error::No KEYSTORE_BASE64 secret set - refusing to build a debug-signed release. Add the release key secrets."
-            exit 1
-          fi
-
-      - name: Build release APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEY_ALIAS: ${{ vars.KEY_ALIAS || secrets.KEY_ALIAS }}
+      - name: Build release APK (unsigned)
         run: |
           chmod +x gradlew
           set -o pipefail
           ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log
 
       - name: Google-free dependency audit
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEY_ALIAS: ${{ vars.KEY_ALIAS || secrets.KEY_ALIAS }}
         run: |
           # Nothing from Google Play services, Firebase, ML Kit, Play Core or Tink may end up in the app.
-          # Runs while the keystore is still there: the build refuses to configure a release on CI without it.
+          # Needs no key: UNSIGNED_RELEASE=true (job env) lets the release build type configure without one.
           if ! ./gradlew --no-daemon -q :app:dependencies --configuration releaseRuntimeClasspath > deps.txt 2> deps-err.txt; then
             grep -E 'What went wrong|Exception|error' -A 3 deps-err.txt | head -20 | while IFS= read -r line; do echo "::error title=Dependency audit::${line}"; done
             exit 1
@@ -110,10 +113,6 @@ jobs:
           fi
           echo "::notice title=Google-free::No Google Play services, Firebase, ML Kit, Play Core or Tink in the release dependencies"
 
-      - name: Remove keystore
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.jks"
-
       - name: Report build errors
         if: failure()
         run: |
@@ -123,24 +122,133 @@ jobs:
             echo "::error::${line}"
           done
 
-      - name: Rename APKs
+      - name: Collect the unsigned APK
+        id: pack
         env:
           TAG: ${{ needs.version.outputs.tag }}
         run: |
+          # Exactly one APK, and it must be the unsigned one: this job has no key to sign with.
+          set -- app/build/outputs/apk/release/*.apk
+          if [ "$#" -ne 1 ] || [ "$(basename "$1")" != "app-release-unsigned.apk" ]; then
+            echo "::error title=Unexpected build output::Expected only app-release-unsigned.apk, found: $*"
+            exit 1
+          fi
           mkdir -p out
-          for f in app/build/outputs/apk/release/*.apk; do
-            cp "$f" "out/MailCtrl-${TAG}.apk"
-          done
+          cp "$1" "out/MailCtrl-${TAG}-unsigned.apk"
+          sum=$(sha256sum "out/MailCtrl-${TAG}-unsigned.apk" | cut -d' ' -f1)
+          echo "apk_sha256=$sum" >> "$GITHUB_OUTPUT"
+          echo "Unsigned APK SHA-256: $sum"
           ls -la out
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          # Not installable: Android refuses an unsigned APK. The signed one is MailCtrl-apk.
+          name: MailCtrl-unsigned-apk
+          path: out/*.apk
+          if-no-files-found: error
+
+  # Signs the APK the build job made. The only job that sees the release key, and it runs no code
+  # from this repo: no checkout, no Gradle, only zipalign and apksigner from the runner's Android SDK.
+  sign:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions: {}   # no token rights at all; artifacts of this run need none
+    outputs:
+      release_signed: ${{ steps.sign.outputs.release_signed }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: MailCtrl-unsigned-apk
+          path: unsigned
+
+      - name: Sign the APK
+        id: sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ vars.KEY_ALIAS || secrets.KEY_ALIAS }}
+          TAG: ${{ needs.version.outputs.tag }}
+          BUILT_SHA256: ${{ needs.build.outputs.apk_sha256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::No KEYSTORE_BASE64 secret set - refusing to publish an APK that isn't signed with the release key. Add the release key secrets."
+            exit 1
+          fi
+          in="unsigned/MailCtrl-${TAG}-unsigned.apk"
+          # The file the build job made, byte for byte.
+          echo "$BUILT_SHA256  $in" | sha256sum -c -
+
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          echo "Android build-tools: $tools"
+          mkdir -p work out
+          # Gradle already aligns the APK; align only if it isn't (signing must come after aligning).
+          if "${tools}zipalign" -c -P 16 4 "$in"; then
+            cp "$in" work/aligned.apk
+          else
+            "${tools}zipalign" -P 16 -f 4 "$in" work/aligned.apk
+          fi
+
+          umask 077
+          ks="$RUNNER_TEMP/release.jks"
+          trap 'rm -f "$ks"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$ks"
+          # The same schemes the Android Gradle plugin used for these releases (minSdk 35): APK
+          # Signature Scheme v2 only. Passwords are read from the environment, never the command line.
+          "${tools}apksigner" sign \
+            --ks "$ks" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD \
+            --v1-signing-enabled false --v2-signing-enabled true \
+            --v3-signing-enabled false --v4-signing-enabled false \
+            --out "out/MailCtrl-${TAG}.apk" work/aligned.apk
+          rm -f "$ks"
+          echo "release_signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Check release signature
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # The APK must be signed with MailCtrl's release key, or phones won't accept it as an update.
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          apk="out/MailCtrl-${TAG}.apk"
+          "${tools}apksigner" verify --verbose --print-certs "$apk" | tee signer.txt
+          signers=$(grep -c 'certificate SHA-256 digest: ' signer.txt || true)
+          actual=$(grep -m1 -oP 'certificate SHA-256 digest: \K[0-9a-f]+' signer.txt || true)
+          if [ "$signers" != "1" ] || [ "$actual" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error title=Wrong signing key::$apk has $signers signer(s), first ${actual:-none}; expected only the MailCtrl release key $EXPECTED_CERT_SHA256"
+            exit 1
+          fi
+          if ! grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' signer.txt; then
+            echo "::error title=Not v2-signed::$apk has no valid APK Signature Scheme v2 signature"
+            exit 1
+          fi
+          "${tools}zipalign" -c -P 16 4 "$apk"
+          # Signing must not have changed anything inside the APK: same files, same contents, same order.
+          python3 - "unsigned/MailCtrl-${TAG}-unsigned.apk" "$apk" <<'PY'
+          import sys, zipfile
+          a, b = ([(i.filename, i.CRC, i.file_size, i.compress_type) for i in zipfile.ZipFile(p).infolist()] for p in sys.argv[1:3])
+          if a != b:
+              sys.exit("::error title=APK changed while signing::The signed APK's contents differ from the APK the build job made")
+          print(f"Signed APK has the same {len(a)} files as the build job's APK.")
+          PY
+          echo "::notice title=Signed::APK signed with the MailCtrl release key ($actual)"
+          sha256sum "$apk"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MailCtrl-apk
           path: out/*.apk
+          if-no-files-found: error
 
   release:
-    needs: [version, build]
-    if: needs.version.outputs.release == 'true' && needs.build.outputs.release_signed == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [version, build, sign]
+    if: needs.version.outputs.release == 'true' && needs.sign.outputs.release_signed == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: write       # publish the release
