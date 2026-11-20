@@ -487,6 +487,7 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
                 NotifyChecker.forget(context, id)
                 c.drafts.deleteForAccount(id)
                 c.cache.clearAccount(id)
+                c.messages.clearAccount(id)
                 c.accounts.remove(id)
                 c.settings.update { if (it.defaultAccount == id) it.copy(defaultAccount = "") else it }
             }

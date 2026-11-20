@@ -4,6 +4,27 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.2.3 (2026-11-20)
+
+MailCtrl now loads mail the way Thunderbird does. Thunderbird downloads messages ahead in batches while it refreshes and keeps them on the phone, so opening one needs no connection at all, while MailCtrl fetched each message when you tapped it, with three or four separate requests, and forgot it when the app closed or locked. Every request waits for the network and the server, which is slow over a VPN and with hydroxide (Proton).
+
+### New
+
+- **Messages are downloaded ahead and kept on the phone.** After each refresh, the newest 50 messages of the folder you're looking at come down in the background, many at once in a single request (in batches of up to 2 MB). Messages over 256 KB are skipped, so big attachments stay on the server until you open them. Opening one of these messages is then instant, with no waiting for the server and even without a connection. Messages you open yourself are kept too, up to 1 MB each. "Load more" downloads the older page ahead as well.
+- **New mail is ready before you tap the notification.** When a background check finds new mail, those messages are downloaded straight away, so tapping the notification opens the message at once.
+- **"Keep messages on this phone" switch** (Settings › Reading, on by default). The copies are encrypted (AES-256-GCM) with a key that is itself protected by the phone's secure hardware and never leaves the phone. They take up to 300 MB in all, and the ones you haven't opened in the longest time are removed first. A message deleted or moved on the server (or from another device) disappears from the phone with the next refresh, and removing an account removes its copies. Turning the switch off removes every copy at once; then only the few newest unread inbox messages are kept in memory, as before.
+
+### Changed
+
+- **Opening a message the phone doesn't have yet takes one request instead of three or four.** The message and its read/flagged state now come in one go. It's also no longer held back until the server has marked it read: it shows straight away, and the read mark goes to the server in the background (if that fails, the message shows as unread again after the next refresh).
+- **Refreshing a folder takes fewer requests.** Checking what changed (new messages, removed ones, read and flagged elsewhere) is now one request instead of two. The folder also stays open between refreshes instead of being opened and closed every time, which saved another two. On a quick connection you won't notice, but on mobile data, over a VPN or with hydroxide it's the difference between a refresh that's done at once and one that visibly loads.
+- **Downloading ahead is much quicker.** It used to fetch each message on its own, with two requests per message. It now fetches up to 40 messages in one request.
+- **Attachments of messages kept on the phone open without downloading them again,** as long as the message was small enough to be kept.
+
+### Privacy
+
+- Until now, messages were only ever kept in memory. With "Keep messages on this phone" on, recent messages are saved on the phone, encrypted as described above, in MailCtrl's private storage, which isn't included in backups. The list of your messages (sender, subject, date) was already kept on the phone. Decrypted OpenPGP messages are still never written to storage. Turn the switch off for the old behaviour.
+
 ## v0.2.2 (2026-11-20)
 
 ### Changed

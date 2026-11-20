@@ -25,7 +25,7 @@ import kotlinx.serialization.json.Json
  * shows something without a connection. Only headers (sender, subject, date, flags): the messages themselves
  * are fetched from the server when you open them.
  */
-class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", null, 2) {
+class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", null, 3) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val addrList = ListSerializer(Address.serializer())
@@ -44,6 +44,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
                 account TEXT NOT NULL, folder TEXT NOT NULL, uid INTEGER NOT NULL,
                 from_name TEXT, from_email TEXT, to_json TEXT, subject TEXT, date INTEGER NOT NULL,
                 seen INTEGER NOT NULL, flagged INTEGER NOT NULL, answered INTEGER NOT NULL, attach INTEGER NOT NULL,
+                size INTEGER NOT NULL DEFAULT -1,
                 PRIMARY KEY (account, folder, uid)
             )
             """.trimIndent(),
@@ -71,6 +72,11 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion == 2) {
+            // Message sizes (for downloading ahead) arrive with the next refresh; the lists stay as they are.
+            db.execSQL("ALTER TABLE messages ADD COLUMN size INTEGER NOT NULL DEFAULT -1")
+            return
+        }
         // Only a cache: start over.
         db.execSQL("DROP TABLE IF EXISTS messages")
         db.execSQL("DROP TABLE IF EXISTS folders")
@@ -92,9 +98,10 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
         flagged = getInt(9) != 0,
         answered = getInt(10) != 0,
         hasAttachments = getInt(11) != 0,
+        size = getLong(12),
     )
 
-    private val cols = "account, folder, uid, from_name, from_email, to_json, subject, date, seen, flagged, answered, attach"
+    private val cols = "account, folder, uid, from_name, from_email, to_json, subject, date, seen, flagged, answered, attach, size"
 
     private fun values(h: MessageHeader) = ContentValues().apply {
         put("account", h.accountId)
@@ -109,6 +116,7 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
         put("flagged", if (h.flagged) 1 else 0)
         put("answered", if (h.answered) 1 else 0)
         put("attach", if (h.hasAttachments) 1 else 0)
+        put("size", h.size)
     }
 
     private fun query(sql: String, args: Array<String>): List<MessageHeader> =
@@ -240,6 +248,15 @@ class MailCache(context: Context) : SQLiteOpenHelper(context, "mailcache.db", nu
                     "account = ? AND folder = ? AND uid = ? AND (seen != ? OR flagged != ? OR answered != ?)",
                     arrayOf(accountId, folder, uid.toString(), seen.toString(), flagged.toString(), answered.toString()),
                 )
+                // The size, for downloading ahead (lists from before 0.2.3 don't have it yet). Not a visible change.
+                if (f.size >= 0) {
+                    db.update(
+                        "messages",
+                        ContentValues().apply { put("size", f.size) },
+                        "account = ? AND folder = ? AND uid = ? AND size != ?",
+                        arrayOf(accountId, folder, uid.toString(), f.size.toString()),
+                    )
+                }
             }
             sync.fresh.forEach { db.insertWithOnConflict("messages", null, values(it), SQLiteDatabase.CONFLICT_REPLACE) }
             db.insertWithOnConflict(

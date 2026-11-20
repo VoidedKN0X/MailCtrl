@@ -165,6 +165,8 @@
     <string name="mark_read">Mark as read</string>
     <string name="mark_read_on_open">Mark as read when opened</string>
     <string name="mark_read_on_open_subtitle">Opening a message marks it read on the server too</string>
+    <string name="keep_messages">Keep messages on this phone</string>
+    <string name="keep_messages_subtitle">New messages are downloaded with the list and saved encrypted, so they open without waiting. Off: messages are only kept in memory, and the saved ones are removed.</string>
     <string name="mark_unread">Mark as unread</string>
     <string name="message_too_long">(This text is too long to show here.)</string>
     <string name="more">More</string>

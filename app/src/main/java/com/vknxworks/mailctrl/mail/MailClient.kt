@@ -9,7 +9,12 @@ import android.util.LruCache
 import com.sun.mail.imap.IMAPFolder
 import com.sun.mail.imap.IMAPMessage
 import com.sun.mail.imap.IMAPStore
+import com.sun.mail.imap.protocol.BODY as BodyItem
+import com.sun.mail.imap.protocol.FLAGS as FlagsItem
+import com.sun.mail.imap.protocol.FetchResponse
+import com.sun.mail.imap.protocol.RFC822SIZE
 import com.sun.mail.imap.protocol.Status
+import com.sun.mail.imap.protocol.UID as UidItem
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.data.accounts.Account
 import com.vknxworks.mailctrl.data.accounts.AccountStore
@@ -83,8 +88,8 @@ data class MessagePage(val headers: List<MessageHeader>, val hasMore: Boolean)
 /** What the phone already has of a folder: the server's numbering of it, and the newest message numbers in its list. */
 data class KnownRange(val uidValidity: Long, val uids: List<Long>)
 
-/** A message's flags as the server has them now. */
-data class FlagState(val seen: Boolean, val flagged: Boolean, val answered: Boolean)
+/** A message's flags as the server has them now, and its size in bytes (-1 when not asked). */
+data class FlagState(val seen: Boolean, val flagged: Boolean, val answered: Boolean, val size: Long = -1)
 
 /** What changed in a folder since its list on the phone was last brought up to date. */
 data class FolderSync(
@@ -120,10 +125,10 @@ data class SpeedReport(
 
 /** Which connection an action uses: background syncing never makes you wait to open a message. */
 enum class Lane {
-    /** Refreshing lists, folders, new-mail checks and reading ahead. Folders are closed after each step. */
+    /** Refreshing lists, folders, new-mail checks and downloading ahead. The folder stays open, read-only. */
     SYNC,
 
-    /** What you do yourself: opening, flagging, moving. The folder stays open for the next action in it. */
+    /** What you do yourself: opening, flagging, moving. The folder stays open, for changes too. */
     USER,
 }
 
@@ -142,13 +147,16 @@ data class NewMailResult(
  * background never holds up opening a message. Connections are reused for minutes instead of signing in again for
  * every action, and dropped when the phone switches networks (Wi-Fi, mobile data, VPN), where they would hang.
  */
-class MailClient(private val context: Context, private val accounts: AccountStore) {
+class MailClient(private val context: Context, private val accounts: AccountStore, private val store: MessageStore) {
+
+    /** Messages are kept on the phone ("Keep messages on this phone"), so downloading ahead keeps many of them. */
+    val keepsCopies: Boolean get() = store.enabled
 
     /** One signed-in IMAP connection, and the folder it has open. */
-    private class Link(val store: IMAPStore, val signature: String, val keepOpen: Boolean) {
+    private class Link(val store: IMAPStore, val signature: String, val forChanges: Boolean) {
         @Volatile var lastUsed = System.currentTimeMillis()
 
-        /** The folder left open after the last action (only on the [Lane.USER] connection). */
+        /** The folder left open after the last action, so the next action in it needs no extra round trip. */
         @Volatile var current: IMAPFolder? = null
 
         /**
@@ -159,8 +167,8 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             private set
 
         /**
-         * [name] opened for reading, or for changes too when [write]. On the [Lane.USER] connection the folder
-         * stays open, so the next action in the same folder needs no extra round trip to the server.
+         * [name] opened for reading, or for changes too when [write]. The folder stays open, so the next action in
+         * the same folder needs no extra round trip to the server (opening and closing a folder are one each).
          */
         fun folder(name: String, write: Boolean): IMAPFolder {
             current?.let { f ->
@@ -178,7 +186,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             val opened = when {
                 write -> f.apply { open(Folder.READ_WRITE) }
                 // Kept open for later changes too, unless the folder is read-only on the server.
-                keepOpen -> try {
+                forChanges -> try {
                     f.apply { open(Folder.READ_WRITE) }
                 } catch (e: ReadOnlyFolderException) {
                     rw = false
@@ -194,14 +202,19 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             return opened
         }
 
-        /** After an action: closes the folder unless it's kept, and notes the time. */
+        /** After an action: notes the time (the folder stays open for the next one). */
         fun done() {
-            if (!keepOpen) {
-                current?.let { f -> runCatching { f.close(false) } }
-                current = null
-                writable = false
-            }
             lastUsed = System.currentTimeMillis()
+        }
+
+        /**
+         * Closes the open folder before asking the server about folders in general (the list, counts): with a
+         * folder open, JavaMail would sign in a second connection for that.
+         */
+        fun release() {
+            current?.let { f -> runCatching { f.close(false) } }
+            current = null
+            writable = false
         }
 
         /** Whether it went unused so long that the network may have dropped it without a word (then asking hangs). */
@@ -402,7 +415,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
                 fun open(): Link {
                     // Signed out in the background: on a dead connection that waits for the read timeout.
                     links.remove(key)?.let { closeLater(it) }
-                    val link = Link(connect(a, passwordOf(a)), signature(a), keepOpen = lane == Lane.USER)
+                    val link = Link(connect(a, passwordOf(a)), signature(a), forChanges = lane == Lane.USER)
                     links[key] = link
                     return link
                 }
@@ -629,7 +642,10 @@ class MailClient(private val context: Context, private val accounts: AccountStor
 
     /** Every folder of the account, special folders first. Also remembers which folder is Sent, Trash and so on. */
     suspend fun folders(accountId: String): List<FolderInfo> {
-        val list = withStore(accountId, Lane.SYNC) { _, link -> listFolders(link.store) }
+        val list = withStore(accountId, Lane.SYNC) { _, link ->
+            link.release()
+            listFolders(link.store)
+        }
         val a = accounts.get(accountId)
         if (a != null) {
             val updated = withRoles(a, list)
@@ -644,12 +660,6 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         add(FetchProfile.Item.ENVELOPE)
         add(FetchProfile.Item.FLAGS)
         add(FetchProfile.Item.CONTENT_INFO)
-        add(UIDFolder.FetchProfileItem.UID)
-    }
-
-    /** Only what can change about a message the phone already has. */
-    private val flagsProfile = FetchProfile().apply {
-        add(FetchProfile.Item.FLAGS)
         add(UIDFolder.FetchProfileItem.UID)
     }
 
@@ -683,6 +693,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             flagged = m.isSet(Flags.Flag.FLAGGED),
             answered = m.isSet(Flags.Flag.ANSWERED),
             hasAttachments = runCatching { hasAttachments(m) }.getOrDefault(false),
+            size = runCatching { m.size.toLong() }.getOrDefault(-1L),
         )
     }.getOrNull()
 
@@ -691,6 +702,38 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         flagged = m.isSet(Flags.Flag.FLAGGED),
         answered = m.isSet(Flags.Flag.ANSWERED),
     )
+
+    private fun flagState(f: Flags?, size: Long = -1) = FlagState(
+        seen = f?.contains(Flags.Flag.SEEN) == true,
+        flagged = f?.contains(Flags.Flag.FLAGGED) == true,
+        answered = f?.contains(Flags.Flag.ANSWERED) == true,
+        size = size,
+    )
+
+    /**
+     * One "UID FETCH [uids] ([items])", answered in a single round trip. (JavaMail would split the same work into
+     * several requests: finding the messages, then their flags, then their contents.) Everything else the server
+     * said meanwhile (new or removed messages, flags changed elsewhere) still reaches the folder. Only answers that
+     * carry a UID are returned: a server may also report changes to other messages on its own.
+     */
+    private fun IMAPFolder.uidFetch(uids: String, items: String): List<FetchResponse> {
+        val answers = doCommand(
+            IMAPFolder.ProtocolCommand { p ->
+                val r = p.command("UID FETCH $uids ($items)", null)
+                p.notifyResponseHandlers(r)
+                p.handleResult(r[r.size - 1])
+                r.filterIsInstance<FetchResponse>().filter { it.getItem(UidItem::class.java) != null }
+            },
+        )
+        @Suppress("UNCHECKED_CAST")
+        return answers as List<FetchResponse>
+    }
+
+    private fun FetchResponse.uid(): Long = getItem(UidItem::class.java)?.uid ?: -1L
+
+    /** The whole message from a "BODY[]" answer, or null. */
+    private fun FetchResponse.wholeMessage(): ByteArray? =
+        getItem(BodyItem::class.java)?.takeIf { it.section.isNullOrEmpty() && it.origin <= 0 }?.byteArray?.newBytes
 
     private fun hasAttachments(p: Part): Boolean {
         if (p.isMimeType("multipart/*")) {
@@ -733,7 +776,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
      * still there. The first time, or when the server renumbered the folder, it starts over with the newest [count].
      */
     suspend fun sync(accountId: String, folderName: String, known: KnownRange?, count: Int): FolderSync =
-        syncList(accountId, folderName, known, count).also { keptSync(accountId, folderName, it) }
+        syncList(accountId, folderName, known, count).also { withContext(Dispatchers.IO) { keptSync(accountId, folderName, it) } }
 
     /**
      * Keeps the messages in memory in step with what [sync] found: changed flags (read on another device), messages
@@ -744,9 +787,12 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             val prefix = bodyKey(accountId, folderName, 0).removeSuffix("0")
             bodies.snapshot().keys.filter { it.startsWith(prefix) }.forEach { bodies.remove(it) }
             raws.snapshot().keys.filter { it.startsWith(prefix) }.forEach { raws.remove(it) }
+            // A number may now be a different message: the copies on the phone go too.
+            store.clearFolder(accountId, folderName)
             return
         }
-        forgetKept(accountId, folderName, sync.removed)
+        forgetMemory(accountId, folderName, sync.removed)
+        store.remove(accountId, folderName, sync.removed)
         sync.flags.forEach { (uid, s) ->
             val key = bodyKey(accountId, folderName, uid)
             val b = bodies.get(key) ?: return@forEach
@@ -765,27 +811,35 @@ class MailClient(private val context: Context, private val accounts: AccountStor
                 return FolderSync(validity, reset = true, fresh = page.headers, flags = emptyMap(), removed = emptySet(), hasMore = page.hasMore)
             }
             if (known == null || known.uids.isEmpty() || known.uidValidity != validity) return@withStore reset()
-            if (f.messageCount <= 0) {
-                return@withStore FolderSync(validity, reset = true, fresh = emptyList(), flags = emptyMap(), removed = emptySet(), hasMore = false)
-            }
             val min = known.uids.min()
             val have = known.uids.toHashSet()
-            // "n:*" always includes the newest message, even below n: filter by UID as well.
-            val msgs = f.getMessagesByUID(min, UIDFolder.LASTUID).filterNotNull().filter { f.getUID(it) >= min }
-            val missing = msgs.filter { f.getUID(it) !in have }
+            // Which messages are there from the oldest the phone has up, with their flags and sizes: one request
+            // (it used to be two, plus one to see whether the folder was empty). "n:*" always includes the newest
+            // message, even below n: filtered by UID as well.
+            val answers = try {
+                f.uidFetch("$min:*", "UID FLAGS RFC822.SIZE")
+            } catch (e: MessagingException) {
+                // Some servers refuse "n:*" in an empty folder.
+                if (f.messageCount <= 0) emptyList() else throw e
+            }.filter { it.uid() >= min }
+            val missing = answers.map { it.uid() }.filter { it !in have }
             // Very far behind (hundreds of new messages): starting over with the newest is quicker.
             if (missing.size > MAX_NEW) return@withStore reset()
-            val kept = msgs.filter { f.getUID(it) in have }.toTypedArray()
-            if (kept.isNotEmpty()) f.fetch(kept, flagsProfile)
-            val fresh = missing.toTypedArray()
+            // The folder already knows these messages from the answer above: no request to find them.
+            val fresh = if (missing.isEmpty()) {
+                emptyArray<Message>()
+            } else {
+                f.getMessagesByUID(missing.toLongArray()).filterNotNull().filterNot { it.isExpunged }.toTypedArray()
+            }
             if (fresh.isNotEmpty()) f.fetch(fresh, listProfile)
-            val present = msgs.map { f.getUID(it) }.toHashSet()
             FolderSync(
                 uidValidity = validity,
                 reset = false,
                 fresh = fresh.mapNotNull { header(a.id, f, it) },
-                flags = kept.associate { f.getUID(it) to flagState(it) },
-                removed = have.filterNot { it in present }.toSet(),
+                flags = answers.filter { it.uid() in have }.associate {
+                    it.uid() to flagState(it.getItem(FlagsItem::class.java), it.getItem(RFC822SIZE::class.java)?.size ?: -1L)
+                },
+                removed = answers.map { it.uid() }.toHashSet().let { present -> have.filterNot { it in present }.toSet() },
                 hasMore = false,
             )
         }
@@ -893,6 +947,34 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             null
         }
         val source: MimeMessage = raw?.let { runCatching { MimeMessage(parseSession, ByteArrayInputStream(it)) }.getOrNull() } ?: m
+        return bodyFrom(h, source, raw) to raw
+    }
+
+    /**
+     * A message from its copy as received (downloaded ahead, or kept on the phone): taken apart on the phone, no
+     * server needed. The list's details ([known]) fill in what the copy can't tell, like the flags.
+     */
+    private fun bodyFromRaw(accountId: String, folder: String, uid: Long, raw: ByteArray, known: MessageHeader?, flags: FlagState?): MessageBody {
+        val source = MimeMessage(parseSession, ByteArrayInputStream(raw))
+        val h = MessageHeader(
+            accountId = accountId,
+            folder = folder,
+            uid = uid,
+            from = addresses(runCatching { source.from }.getOrNull()).firstOrNull() ?: known?.from,
+            to = addresses(runCatching { source.getRecipients(Message.RecipientType.TO) }.getOrNull()).ifEmpty { known?.to.orEmpty() },
+            subject = runCatching { source.subject }.getOrNull()?.trim() ?: known?.subject.orEmpty(),
+            date = known?.date?.takeIf { it > 0 } ?: runCatching { source.sentDate?.time }.getOrNull() ?: 0L,
+            seen = flags?.seen ?: known?.seen ?: false,
+            flagged = flags?.flagged ?: known?.flagged ?: false,
+            answered = flags?.answered ?: known?.answered ?: false,
+            hasAttachments = known?.hasAttachments ?: runCatching { hasAttachments(source) }.getOrDefault(false),
+            size = raw.size.toLong(),
+        )
+        return bodyFrom(h, source, raw)
+    }
+
+    /** A message's text, attachments and pictures, read from [source]: the parsed copy, or the server's message. */
+    private fun bodyFrom(h: MessageHeader, source: MimeMessage, raw: ByteArray?): MessageBody {
         val parts = Collected()
         collect(source, "", parts)
         val pgp = pgpPayload(source, raw, parts)
@@ -904,12 +986,12 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         }
         val html = parts.html
         val from = h.from?.email
-        val body = MessageBody(
+        return MessageBody(
             header = h,
-            cc = addresses(runCatching { m.getRecipients(Message.RecipientType.CC) }.getOrNull()),
-            bcc = addresses(runCatching { m.getRecipients(Message.RecipientType.BCC) }.getOrNull()),
-            replyTo = addresses(runCatching { m.replyTo }.getOrNull()).filterNot { it.email.equals(from, ignoreCase = true) },
-            messageId = runCatching { m.messageID }.getOrNull(),
+            cc = addresses(runCatching { source.getRecipients(Message.RecipientType.CC) }.getOrNull()),
+            bcc = addresses(runCatching { source.getRecipients(Message.RecipientType.BCC) }.getOrNull()),
+            replyTo = addresses(runCatching { source.replyTo }.getOrNull()).filterNot { it.email.equals(from, ignoreCase = true) },
+            messageId = runCatching { source.messageID }.getOrNull(),
             references = runCatching { source.getHeader("References")?.firstOrNull() }.getOrNull(),
             html = html,
             text = parts.text,
@@ -920,7 +1002,6 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             pgp = pgp,
             autocrypt = runCatching { source.getHeader("Autocrypt")?.firstOrNull() }.getOrNull()?.take(AUTOCRYPT_MAX),
         )
-        return body to raw
     }
 
     /** PGP/MIME (encrypted or signed), or an inline encrypted or signed text, if the message has one. */
@@ -983,54 +1064,106 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         if (raw != null) raws.put(key, raw)
     }
 
-    /** Opens one message: its text, attachments and inline pictures. Marks it read when [markRead]. */
-    suspend fun open(accountId: String, folderName: String, uid: Long, markRead: Boolean): MessageBody {
+    /**
+     * Opens one message: its text, attachments and inline pictures. Marks it read when [markRead] (shown at once;
+     * the server is told in the background). [known] is the message as the list has it, if at hand.
+     *
+     * Quickest first: a copy in memory, then the copy kept on the phone (no server at all), then the server, where
+     * a small message (most mail) and its flags come in a single request.
+     */
+    suspend fun open(accountId: String, folderName: String, uid: Long, markRead: Boolean, known: MessageHeader? = null): MessageBody {
         val key = bodyKey(accountId, folderName, uid)
-        bodies.get(key)?.let { kept ->
-            if (!markRead || kept.header.seen) return kept
-            // Shown straight away; the server is told it's read in the background.
-            val read = kept.copy(header = kept.header.copy(seen = true))
-            bodies.put(key, read)
-            closer.launch {
-                runCatching { setFlag(accountId, folderName, listOf(uid), Flags.Flag.SEEN, true) }
-                    // Not marked on the server: the copy in memory says unread again, so the next opening retries.
-                    .onFailure { keptFlag(accountId, folderName, listOf(uid), Flags.Flag.SEEN, false) }
-            }
-            return read
+        bodies.get(key)?.let { kept -> return shown(key, kept, markRead) }
+        val local = withContext(Dispatchers.IO) {
+            store.get(accountId, folderName, uid)?.let { raw -> runCatching { bodyFromRaw(accountId, folderName, uid, raw, known, null) to raw }.getOrNull() }
         }
-        return withStore(accountId) { a, link ->
+        if (local != null) {
+            keep(key, local.first, local.second)
+            return shown(key, local.first, markRead)
+        }
+        val (body, raw) = withStore(accountId) { a, link ->
             val f = link.folder(folderName, write = false)
-            val writable = link.writable
+            if ((known?.size ?: -1L) in 0..WHOLE_MAX.toLong()) {
+                val answer = f.uidFetch("$uid", "UID FLAGS BODY.PEEK[]").firstOrNull { it.uid() == uid }
+                    ?: throw MailException(str(R.string.error_message_gone))
+                val whole = answer.wholeMessage()
+                if (whole != null) {
+                    return@withStore bodyFromRaw(a.id, folderName, uid, whole, known, flagState(answer.getItem(FlagsItem::class.java))) to whole
+                }
+            }
             val m = f.getMessageByUID(uid) as? IMAPMessage ?: throw MailException(str(R.string.error_message_gone))
-            val (body, raw) = loadBody(a, f, m)
-            if (markRead && writable && !body.header.seen) runCatching { m.setFlag(Flags.Flag.SEEN, true) }
-            val shown = if (markRead && writable) body.copy(header = body.header.copy(seen = true)) else body
-            keep(key, shown, raw)
-            shown
+            loadBody(a, f, m)
         }
+        keep(key, body, raw)
+        if (raw != null) withContext(Dispatchers.IO) { store.put(accountId, folderName, uid, raw) }
+        return shown(key, body, markRead)
+    }
+
+    /** [body] as shown: marked read at once when [markRead], and on the server in the background. */
+    private fun shown(key: String, body: MessageBody, markRead: Boolean): MessageBody {
+        if (!markRead || body.header.seen) return body
+        val h = body.header
+        val read = body.copy(header = h.copy(seen = true))
+        bodies.put(key, read)
+        closer.launch {
+            runCatching { setFlag(h.accountId, h.folder, listOf(h.uid), Flags.Flag.SEEN, true) }
+                // Not marked on the server: the copy in memory says unread again, so the next opening retries.
+                .onFailure { keptFlag(h.accountId, h.folder, listOf(h.uid), Flags.Flag.SEEN, false) }
+        }
+        return read
     }
 
     /**
-     * Reads a few small messages ahead (the newest unread ones), so they open instantly. Nothing is marked read and
-     * nothing from the internet is loaded; the copies live in memory only.
+     * Downloads messages ahead, so they open without waiting, the way Thunderbird does it: many messages in one
+     * request instead of a few requests per message, newest first, a couple of megabytes at a time (so a refresh
+     * waits for one batch at most). Kept on the phone when "Keep messages on this phone" is on; otherwise in
+     * memory only. Nothing is marked read and nothing from the internet is loaded. Messages already here, bigger
+     * than [AHEAD_MAX] (or [PREFETCH_MAX] in memory) or of unknown size are skipped.
      */
-    suspend fun prefetch(accountId: String, folderName: String, uids: List<Long>) {
-        val todo = uids.filter { bodies.get(bodyKey(accountId, folderName, it)) == null }
+    suspend fun prefetch(accountId: String, folderName: String, headers: List<MessageHeader>) {
+        val onPhone = store.enabled
+        val max = if (onPhone) AHEAD_MAX else PREFETCH_MAX
+        val todo = withContext(Dispatchers.IO) {
+            headers.filter { h ->
+                h.size in 1..max.toLong() && bodies.get(bodyKey(accountId, folderName, h.uid)) == null &&
+                    !(onPhone && store.has(accountId, folderName, h.uid))
+            }.sortedByDescending { it.uid }
+        }
         if (todo.isEmpty()) return
-        withStore(accountId, Lane.SYNC) { a, link ->
-            val f = link.folder(folderName, write = false)
-            val msgs = f.getMessagesByUID(todo.toLongArray()).filterNotNull().filterIsInstance<IMAPMessage>()
-            val sizes = FetchProfile().apply {
-                add(FetchProfile.Item.SIZE)
-                add(UIDFolder.FetchProfileItem.UID)
+        val batches = mutableListOf<List<MessageHeader>>()
+        var batch = mutableListOf<MessageHeader>()
+        var bytes = 0L
+        for (h in todo) {
+            if (batch.isNotEmpty() && (bytes + h.size > BATCH_BYTES || batch.size >= BATCH_COUNT)) {
+                batches += batch
+                batch = mutableListOf()
+                bytes = 0
             }
-            f.fetch(msgs.toTypedArray<Message>(), sizes)
-            msgs.filter { runCatching { it.size }.getOrDefault(-1) in 0..PREFETCH_MAX }.forEach { m ->
-                runCatching {
-                    val (body, raw) = loadBody(a, f, m)
-                    val key = bodyKey(a.id, folderName, f.getUID(m))
-                    // Opened (or flagged) meanwhile: that copy is newer than this one.
-                    if (bodies.get(key) == null) keep(key, body, raw)
+            batch += h
+            bytes += h.size
+        }
+        if (batch.isNotEmpty()) batches += batch
+        for (b in batches) {
+            val byUid = b.associateBy { it.uid }
+            val got = withStore(accountId, Lane.SYNC) { _, link ->
+                val f = link.folder(folderName, write = false)
+                f.uidFetch(b.joinToString(",") { it.uid.toString() }, "UID BODY.PEEK[]").mapNotNull { r ->
+                    r.wholeMessage()?.let { r.uid() to it }
+                }
+            }
+            withContext(Dispatchers.IO) {
+                got.forEach { (uid, raw) ->
+                    val h = byUid[uid] ?: return@forEach
+                    if (onPhone) {
+                        store.put(accountId, folderName, uid, raw)
+                    } else {
+                        runCatching {
+                            val key = bodyKey(accountId, folderName, uid)
+                            val body = bodyFromRaw(accountId, folderName, uid, raw, h, null)
+                            // Opened (or flagged) meanwhile: that copy is newer than this one.
+                            if (bodies.get(key) == null) keep(key, body, raw)
+                        }
+                    }
                 }
             }
         }
@@ -1165,7 +1298,8 @@ class MailClient(private val context: Context, private val accounts: AccountStor
                 writePart(resolve(MimeMessage(parseSession, ByteArrayInputStream(inner)), att.path.removePrefix(PGP_PATH)), att)
             }
         }
-        raws.get(bodyKey(accountId, folderName, uid))?.let { raw ->
+        val kept = raws.get(bodyKey(accountId, folderName, uid)) ?: withContext(Dispatchers.IO) { store.get(accountId, folderName, uid) }
+        kept?.let { raw ->
             val local = withContext(Dispatchers.IO) {
                 runCatching { writePart(resolve(MimeMessage(parseSession, ByteArrayInputStream(raw)), att.path), att) }.getOrNull()
             }
@@ -1201,12 +1335,18 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         }
     }
 
-    private fun forgetKept(accountId: String, folderName: String, uids: Collection<Long>) {
+    private fun forgetMemory(accountId: String, folderName: String, uids: Collection<Long>) {
         uids.forEach { uid ->
             val key = bodyKey(accountId, folderName, uid)
             bodies.remove(key)
             raws.remove(key)
         }
+    }
+
+    /** Messages moved or deleted: their copies in memory and on the phone go. */
+    private suspend fun forgetKept(accountId: String, folderName: String, uids: Collection<Long>) {
+        forgetMemory(accountId, folderName, uids)
+        withContext(Dispatchers.IO) { store.remove(accountId, folderName, uids) }
     }
 
     suspend fun setFlag(accountId: String, folderName: String, uids: Collection<Long>, flag: Flags.Flag, value: Boolean) {
@@ -1444,8 +1584,15 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         /** Messages listed by the speed test. */
         private const val SPEED_LIST = 25
 
-        /** Only messages up to this size are read ahead. */
+        /** Only messages up to this size are read ahead into memory (with copies on the phone turned off). */
         private const val PREFETCH_MAX = 300 * 1024
+
+        /** Messages up to this size are downloaded ahead and kept on the phone (Thunderbird: 128 KB). */
+        private const val AHEAD_MAX = 256 * 1024
+
+        /** Downloading ahead: at most this much, and this many messages, per request. */
+        private const val BATCH_BYTES = 2L * 1024 * 1024
+        private const val BATCH_COUNT = 40
 
         /** Memory for opened messages (characters) and whole small messages (bytes). */
         private const val BODY_CACHE_BYTES = 8 * 1024 * 1024

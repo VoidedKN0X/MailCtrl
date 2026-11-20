@@ -70,6 +70,12 @@ object NotifyChecker {
                     // The inbox list shows them too, the next time it's opened.
                     c.cache.putOlder(r.fresh)
                     c.notifier.newMail(a, r.fresh, s.notificationContentFor(c.vault.enabled), all.size > 1)
+                    // Downloaded now, so tapping the notification opens the message without waiting.
+                    if (s.keepMessages) {
+                        // Started in the background: the settings may not have reached the store yet.
+                        c.messages.enabled = true
+                        runCatching { c.mail.prefetch(a.id, "INBOX", r.fresh) }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e

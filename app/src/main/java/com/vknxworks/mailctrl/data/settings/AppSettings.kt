@@ -87,6 +87,8 @@ data class AppSettings(
     val remoteContent: RemoteContent = RemoteContent.ASK,
     /** Opening a message marks it read. */
     val markReadOnOpen: Boolean = true,
+    /** Messages are downloaded ahead and kept on the phone (encrypted), so they open without waiting. */
+    val keepMessages: Boolean = true,
     /** The Inbox tab shows every account's inbox together. */
     val unifiedInbox: Boolean = true,
     val swipeRight: SwipeAction = SwipeAction.READ,
@@ -119,6 +121,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val pushEndpoint = stringPreferencesKey("push_endpoint")
         val remoteContent = stringPreferencesKey("remote_content")
         val markReadOnOpen = booleanPreferencesKey("mark_read_on_open")
+        val keepMessages = booleanPreferencesKey("keep_messages")
         val unifiedInbox = booleanPreferencesKey("unified_inbox")
         val swipeRight = stringPreferencesKey("swipe_right")
         val swipeLeft = stringPreferencesKey("swipe_left")
@@ -149,6 +152,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         pushEndpoint = this[K.pushEndpoint],
         remoteContent = enumOr(this[K.remoteContent], RemoteContent.ASK),
         markReadOnOpen = this[K.markReadOnOpen] ?: true,
+        keepMessages = this[K.keepMessages] ?: true,
         unifiedInbox = this[K.unifiedInbox] ?: true,
         swipeRight = enumOr(this[K.swipeRight], SwipeAction.READ),
         swipeLeft = enumOr(this[K.swipeLeft], SwipeAction.ARCHIVE),
@@ -174,6 +178,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             if (endpoint != null) p[K.pushEndpoint] = endpoint else p.remove(K.pushEndpoint)
             p[K.remoteContent] = s.remoteContent.name
             p[K.markReadOnOpen] = s.markReadOnOpen
+            p[K.keepMessages] = s.keepMessages
             p[K.unifiedInbox] = s.unifiedInbox
             p[K.swipeRight] = s.swipeRight.name
             p[K.swipeLeft] = s.swipeLeft.name

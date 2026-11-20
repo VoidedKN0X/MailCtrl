@@ -45,6 +45,14 @@ class MailCtrlApp : Application() {
             }
         }
 
+        // "Keep messages on this phone": turned off, every copy is removed straight away.
+        c.appScope.launch {
+            c.settings.stored.map { it.keepMessages }.distinctUntilChanged().collect { keep ->
+                c.messages.enabled = keep
+                if (!keep) runCatching { c.messages.clearAll() }
+            }
+        }
+
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 val s = c.settings.settings.value

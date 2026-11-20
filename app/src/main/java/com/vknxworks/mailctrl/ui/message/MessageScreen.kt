@@ -156,11 +156,12 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
     var wkdEmail by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(accountId, folder, uid, attempt) {
-        state = Loaded.Loading(c.cache.header(accountId, folder, uid))
+        val listed = c.cache.header(accountId, folder, uid)
+        state = Loaded.Loading(listed)
         state = try {
             // The saved settings, not the placeholder ones a message opened right at start-up would see.
             val saved = c.settings.current()
-            val body = c.mail.open(accountId, folder, uid, markRead = saved.markReadOnOpen)
+            val body = c.mail.open(accountId, folder, uid, markRead = saved.markReadOnOpen, known = listed)
             c.lastOpened = body
             if (body.header.seen) c.cache.setFlags(accountId, folder, listOf(uid), seen = true)
             c.notifier.cancel(body.header)

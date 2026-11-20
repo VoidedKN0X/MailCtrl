@@ -55,7 +55,9 @@ class AppContainer(val context: Context) {
     val accounts = AccountStore(context, vault)
     // Made when first needed, so starting the app (or a background check) doesn't open what it won't use.
     val cache by lazy { MailCache(context) }
-    val mail by lazy { MailClient(context, accounts) }
+    /** Messages kept on the phone, encrypted, so they open without the server. */
+    val messages by lazy { com.vknxworks.mailctrl.mail.MessageStore(context) }
+    val mail by lazy { MailClient(context, accounts, messages) }
     val actions by lazy { MailActions(mail, cache, accounts, appScope) }
     val drafts by lazy { DraftStore(context, vault) }
     val notifier = Notifier(context)

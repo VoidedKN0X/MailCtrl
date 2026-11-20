@@ -63,6 +63,8 @@ data class MessageHeader(
     val flagged: Boolean,
     val answered: Boolean,
     val hasAttachments: Boolean,
+    /** Size on the server in bytes, or -1 when unknown. */
+    val size: Long = -1,
 ) {
     val key: String get() = "$accountId/$folder/$uid"
 }

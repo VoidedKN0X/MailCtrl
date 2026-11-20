@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -257,6 +258,12 @@ fun SettingsScreen() {
                     s.markReadOnOpen,
                     icon = Icons.Outlined.MarkEmailRead,
                 ) { v -> update { it.copy(markReadOnOpen = v) } }
+                GroupSwitch(
+                    stringResource(R.string.keep_messages),
+                    stringResource(R.string.keep_messages_subtitle),
+                    s.keepMessages,
+                    icon = Icons.Outlined.DownloadForOffline,
+                ) { v -> update { it.copy(keepMessages = v) } }
                 if (accounts.size > 1) {
                     GroupSwitch(
                         stringResource(R.string.unified_inbox),

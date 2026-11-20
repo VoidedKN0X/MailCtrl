@@ -47,18 +47,20 @@ class MailActions(
         val sync = mail.sync(accountId, folder, known, PAGE)
         cache.applySync(accountId, folder, sync)
         stamp("$accountId|$folder")
-        if (folder == INBOX) readAhead(accountId, folder)
+        if (mail.keepsCopies || folder == INBOX) readAhead(accountId, folder)
     }
 
     /**
-     * Reads the newest few unread messages ahead in the background, so they open instantly. They stay unread, and
-     * nothing from the internet is loaded.
+     * Downloads messages ahead in the background, so they open without waiting. With copies kept on the phone:
+     * the newest [AHEAD] of the folder (as Thunderbird does with every folder it syncs). Otherwise only the newest
+     * few unread ones of the inbox, into memory. They stay unread, and nothing from the internet is loaded.
      */
     private fun readAhead(accountId: String, folder: String) {
         scope.launch {
             runCatching {
-                val unread = cache.messages(accountId, folder).asSequence().filter { !it.seen }.take(READ_AHEAD).map { it.uid }.toList()
-                mail.prefetch(accountId, folder, unread)
+                val list = cache.messages(accountId, folder)
+                val wanted = if (mail.keepsCopies) list.take(AHEAD) else list.asSequence().filter { !it.seen }.take(READ_AHEAD).toList()
+                mail.prefetch(accountId, folder, wanted)
             }
         }
     }
@@ -83,6 +85,7 @@ class MailActions(
         }
         val page = mail.messages(accountId, folder, count = PAGE, beforeUid = oldest)
         cache.putOlder(page.headers)
+        if (mail.keepsCopies) scope.launch { runCatching { mail.prefetch(accountId, folder, page.headers) } }
         return page.hasMore
     }
 
@@ -178,6 +181,9 @@ class MailActions(
 
         /** Unread messages read ahead after an inbox refresh. */
         private const val READ_AHEAD = 5
+
+        /** Messages of a folder downloaded ahead and kept on the phone, newest first (Thunderbird keeps 25). */
+        private const val AHEAD = 50
 
         /** Opening a tab again within this time shows what's there without asking the server again. */
         const val RECENT_MS = 30_000L
