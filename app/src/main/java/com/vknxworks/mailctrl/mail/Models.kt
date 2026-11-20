@@ -166,3 +166,22 @@ class UntrustedCertificateException(
 
 /** Signing in failed: wrong username or password (or an app password is needed). */
 class AuthException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+/**
+ * A line break or another control character. None may ever reach a mail header or an SMTP command: a line
+ * break there starts a new header or command of the writer's choosing (header and SMTP injection).
+ */
+fun String.hasControlChars(): Boolean = any { it.isISOControl() }
+
+/** The same text with every control character (line breaks, tabs, ...) turned into a space. */
+fun String.withoutControlChars(): String =
+    if (!hasControlChars()) this else String(CharArray(length) { i -> if (this[i].isISOControl()) ' ' else this[i] })
+
+/**
+ * A header value taken from a received message (Message-ID, References) on one line: folded lines are joined
+ * and any other control character is dropped.
+ */
+fun String.unfoldedHeader(): String =
+    if (!hasControlChars()) this else replace(HEADER_FOLD, " ").filterNot { it.isISOControl() }
+
+private val HEADER_FOLD = Regex("\\r?\\n[ \\t]+")

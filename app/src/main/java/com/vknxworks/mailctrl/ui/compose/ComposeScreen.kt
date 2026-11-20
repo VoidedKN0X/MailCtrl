@@ -67,6 +67,8 @@ import com.vknxworks.mailctrl.mail.Attachment
 import com.vknxworks.mailctrl.mail.MessageBody
 import com.vknxworks.mailctrl.mail.OutgoingAttachment
 import com.vknxworks.mailctrl.mail.PgpPayload
+import com.vknxworks.mailctrl.mail.hasControlChars
+import com.vknxworks.mailctrl.mail.withoutControlChars
 import com.vknxworks.mailctrl.pgp.KeyInfo
 import com.vknxworks.mailctrl.pgp.UnlockedKey
 import com.vknxworks.mailctrl.str
@@ -206,7 +208,7 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 }
                 return Start(
                     accountId = account.id,
-                    subject = prefixed(h.subject, "Fwd: ", listOf("fwd:", "fw:")),
+                    subject = prefixed(h.subject.withoutControlChars(), "Fwd: ", listOf("fwd:", "fw:")),
                     body = signature + head + quotedText,
                     forwarded = original.attachments.filterNot { it.isInline && original.inlineImages.containsKey(it.contentId) },
                     forwardFolder = folder,
@@ -232,7 +234,7 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 accountId = account.id,
                 to = to.joinToString(", ") { it.formatted() },
                 cc = cc.joinToString(", ") { it.formatted() },
-                subject = prefixed(h.subject, "Re: ", listOf("re:")),
+                subject = prefixed(h.subject.withoutControlChars(), "Re: ", listOf("re:")),
                 body = signature + "\n\n" + intro + "\n" + quoted,
                 inReplyTo = original.messageId,
                 references = listOfNotNull(original.references, original.messageId).joinToString(" ").trim().ifBlank { null },
@@ -250,7 +252,8 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 to = (request?.to ?: listOfNotNull(route.to)).joinToString(", "),
                 cc = request?.cc.orEmpty().joinToString(", "),
                 bcc = request?.bcc.orEmpty().joinToString(", "),
-                subject = request?.subject.orEmpty(),
+                // From a "mailto:" link or another app's share: line breaks and the like become spaces.
+                subject = request?.subject.orEmpty().withoutControlChars(),
                 body = request?.body.orEmpty() + signature,
                 files = request?.attachments.orEmpty(),
             )
@@ -261,7 +264,8 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
 private fun prefixed(subject: String, prefix: String, existing: List<String>): String =
     if (existing.any { subject.trim().startsWith(it, ignoreCase = true) }) subject.trim() else prefix + subject.trim()
 
-private fun Address.formatted(): String = if (name.isBlank()) email else "${name.replace("\"", "")} <$email>"
+// A name from a received message can hide a line break in it; it never goes into the recipient fields.
+private fun Address.formatted(): String = if (name.isBlank()) email else "${name.replace("\"", "").withoutControlChars()} <$email>"
 
 /** The message as plain text, for quoting: its text version, or the HTML version without the markup. */
 private fun plainText(body: MessageBody): String {
@@ -283,7 +287,10 @@ private fun parseAddresses(text: String): List<Address>? {
         InternetAddress.parse(text.replace(';', ','), false).map { a ->
             val email = a.address?.trim().orEmpty()
             if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) return null
-            Address(a.personal?.trim().orEmpty(), email)
+            val name = a.personal?.trim().orEmpty()
+            // A line break or other control character in an address or a name is never sent (header injection).
+            if (email.hasControlChars() || name.hasControlChars()) return null
+            Address(name, email)
         }
     }.getOrNull()
 }
@@ -389,6 +396,10 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         }
         if (toList.isEmpty() && ccList.isEmpty() && bccList.isEmpty()) {
             Toast.makeText(context, context.getString(R.string.no_recipient), Toast.LENGTH_LONG).show()
+            return
+        }
+        if (subject.hasControlChars()) {
+            Toast.makeText(context, context.getString(R.string.subject_control_chars), Toast.LENGTH_LONG).show()
             return
         }
         // Never sent unprotected by surprise: a missing key stops it here, with the reason.

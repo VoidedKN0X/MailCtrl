@@ -4,6 +4,20 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## Unreleased
+
+Changes on `main` that aren't in a release yet. They ship with the next version.
+
+### Security
+
+- **Line breaks and other hidden control characters are refused in everything that becomes a mail header.** MailCtrl now refuses to send when a recipient's address or name, your own sender name or address, the subject or an attachment's name contains a line break or another control character, and tells you why. Such characters could come in through a `mailto:` link, another app's share, or a crafted message you reply to, and would let whoever wrote them add headers or recipients of their own to your message.
+- **Text arriving from outside is cleaned first, so you aren't stopped by something you can't see.** A subject handed over by a `mailto:` link or a share, the subject of a message you reply to or forward, and the names filled into To and Cc when you reply have any control character replaced by a space. The hidden Message-ID and References of a reply are put on one clean line.
+- **A message that crashes the HTML viewer no longer closes the app.** When Android's web engine crashes on a message or is stopped for using too much memory (a huge or broken HTML mail), Android used to close MailCtrl, and again every time that message was opened. MailCtrl now shows "This message couldn't be displayed." with a Retry button in place of the message, and everything else keeps working.
+
+### Changed
+
+- **Less work for the phone's secure hardware.** The key that protects saved passwords and drafts is looked up once per app start instead of on every read and write. The key itself still never leaves the secure hardware; if the remembered handle stops working, MailCtrl looks the key up again and retries.
+
 ## v0.2.3 (2026-11-20)
 
 MailCtrl now loads mail the way Thunderbird does. Thunderbird downloads messages ahead in batches while it refreshes and keeps them on the phone, so opening one needs no connection at all, while MailCtrl fetched each message when you tapped it, with three or four separate requests, and forgot it when the app closed or locked. Every request waits for the network and the server, which is slow over a VPN and with hydroxide (Proton).

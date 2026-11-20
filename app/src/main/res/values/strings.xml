@@ -59,6 +59,9 @@
     <string name="error_attachment_gone">This attachment can\'t be found in the message any more</string>
     <string name="error_auth">Wrong username or password. Providers with two-step sign-in need an app password.</string>
     <string name="error_build">Couldn\'t put the message together</string>
+    <string name="error_control_chars">An address, a name, the subject or an attachment\'s name contains a line break or another hidden control character, so the message wasn\'t sent. Retype it and try again.</string>
+    <string name="subject_control_chars">The subject contains a line break or another hidden control character. Retype the subject and try again.</string>
+    <string name="html_crashed">This message couldn\'t be displayed.</string>
     <string name="error_connect">Can\'t reach the server. Check the address, the port and your connection (or your VPN).</string>
     <string name="error_generic">Something went wrong</string>
     <string name="error_load_title">Couldn\'t load this</string>

@@ -1461,8 +1461,9 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         if (out.bcc.isNotEmpty()) m.setRecipients(Message.RecipientType.BCC, list(out.bcc))
         m.setSubject(out.subject, "UTF-8")
         m.sentDate = Date()
-        out.inReplyTo?.let { m.setHeader("In-Reply-To", it) }
-        out.references?.let { m.setHeader("References", MimeUtility.fold(12, it)) }
+        // Both come from the message being answered, so they're put on one clean line first.
+        out.inReplyTo?.unfoldedHeader()?.takeIf { it.isNotBlank() }?.let { m.setHeader("In-Reply-To", it) }
+        out.references?.unfoldedHeader()?.takeIf { it.isNotBlank() }?.let { m.setHeader("References", MimeUtility.fold(12, it)) }
         val pgp = out.pgp
         if (pgp == null) {
             fillContent(m, out, protect = false)
@@ -1513,11 +1514,29 @@ class MailClient(private val context: Context, private val accounts: AccountStor
     }
 
     /**
+     * Refuses to send when an address, a name, the subject or an attachment's name holds a line break or
+     * another control character. Those end up in the message's headers and in the commands to the mail
+     * server, where a line break would let whoever supplied the text (a "mailto:" link, another app's share,
+     * a crafted message being answered) add headers, recipients or commands of their own.
+     */
+    private fun requireCleanHeaders(a: Account, out: OutgoingMessage) {
+        val values = buildList {
+            add(a.email)
+            add(a.senderName)
+            (out.to + out.cc + out.bcc).forEach { add(it.email); add(it.name) }
+            add(out.subject)
+            out.attachments.forEach { add(it.name); add(it.mimeType) }
+        }
+        if (values.any { it.hasControlChars() }) throw MailException(str(R.string.error_control_chars))
+    }
+
+    /**
      * Sends [out] from account [accountId]. Returns false when it was sent but the copy for the Sent folder
      * couldn't be saved (the mail itself is gone either way).
      */
     suspend fun send(accountId: String, out: OutgoingMessage): Boolean = withContext(Dispatchers.IO) {
         val a = accounts.get(accountId) ?: throw MailException(str(R.string.error_no_account))
+        requireCleanHeaders(a, out)
         val password = passwordOf(a)
         val trust = ServerTrust.forServer(a.smtp.host, a.trustedCerts).also { it.clearRejection() }
         val (session, proto) = session(a.smtp, smtp = true, trust = trust, from = a.email)

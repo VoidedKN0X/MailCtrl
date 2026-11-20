@@ -3,16 +3,27 @@ package com.vknxworks.mailctrl.ui.message
 import android.annotation.SuppressLint
 import android.graphics.Color
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.vknxworks.mailctrl.R
+import com.vknxworks.mailctrl.ui.theme.CtrlColors
 import java.io.ByteArrayInputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -69,7 +80,15 @@ fun HtmlView(html: String, remote: Boolean, onLink: (String) -> Unit, modifier: 
     val loaded = remember { arrayOfNulls<Pair<String, Boolean>>(1) }
     // Read on WebView's own background thread (shouldInterceptRequest), so not the view's tag.
     val allowNetwork = remember { AtomicBoolean(false) }
-    AndroidView(
+    // The page whose renderer crashed or was stopped by Android (a huge or broken message). Without handling
+    // that, Android closes the whole app. The dead WebView is dropped and a notice is shown in its place.
+    val crashed = remember { mutableStateOf<String?>(null) }
+    if (crashed.value == html) {
+        Column(modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(stringResource(R.string.html_crashed), style = MaterialTheme.typography.bodyMedium, color = CtrlColors.Muted)
+            TextButton(onClick = { crashed.value = null }) { Text(stringResource(R.string.retry)) }
+        }
+    } else AndroidView(
         modifier = modifier,
         factory = { ctx ->
             WebView(ctx).apply {
@@ -115,6 +134,15 @@ fun HtmlView(html: String, remote: Boolean, onLink: (String) -> Unit, modifier: 
                             else -> false
                         }
                         return if (allowed) null else WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+                    }
+
+                    override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                        // This view can't be used again: remember which page it was, so it leaves the screen
+                        // (and is destroyed in onRelease) and a new view loads the page if you tap Retry.
+                        crashed.value = loaded[0]?.first ?: ""
+                        loaded[0] = null
+                        // Handled: Android would close the app otherwise.
+                        return true
                     }
                 }
             }
