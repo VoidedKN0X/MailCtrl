@@ -49,13 +49,33 @@ class MailCtrlApp : Application() {
             override fun onStart(owner: LifecycleOwner) {
                 val s = c.settings.settings.value
                 AppLock.onForeground(c.vault.enabled, s.lockTimeout.millis)
+                foreground = true
+                // After switching networks while MailCtrl is open, sign in again right away too.
+                c.mail.onNetworkChanged = { if (foreground) signInAhead() }
+                signInAhead()
             }
 
             override fun onStop(owner: LifecycleOwner) {
                 val s = c.settings.settings.value
                 AppLock.onBackground(c.vault.enabled, s.lockTimeout.millis)
+                foreground = false
             }
         })
+    }
+
+    /** MailCtrl is on screen. */
+    @Volatile
+    private var foreground = false
+
+    /**
+     * Signs in to every account in the background as soon as MailCtrl opens, so the message you tap first doesn't
+     * wait for a sign-in.
+     */
+    private fun signInAhead() {
+        val c = container
+        val ids = c.accounts.accounts.value.map { it.id }
+        if (ids.isEmpty()) return
+        c.appScope.launch { runCatching { c.mail.warmUp(ids) } }
     }
 
     companion object {

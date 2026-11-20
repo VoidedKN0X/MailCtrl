@@ -6,6 +6,7 @@ import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
@@ -17,6 +18,9 @@ import javax.net.ssl.X509TrustManager
  * by its exact fingerprint (self-signed certificates such as Proton Mail Bridge's).
  *
  * A certificate that fails is remembered in [rejected], so MailCtrl can show it and ask.
+ *
+ * Use [forServer]: one checker per server for the whole run of the app, so connections after the first resume the
+ * earlier secure session (a shorter handshake) instead of starting from scratch.
  */
 class ServerTrust(private val host: String, private val pinned: Collection<String>) : X509TrustManager {
     private val system: X509TrustManager = run {
@@ -49,10 +53,18 @@ class ServerTrust(private val host: String, private val pinned: Collection<Strin
 
     override fun getAcceptedIssuers(): Array<X509Certificate> = system.acceptedIssuers
 
-    fun socketFactory(): SSLSocketFactory {
+    /** One TLS context per checker: its session cache is what lets later connections resume. */
+    private val factory: SSLSocketFactory by lazy {
         val ctx = SSLContext.getInstance("TLS")
         ctx.init(null, arrayOf(this), null)
-        return ctx.socketFactory
+        ctx.socketFactory
+    }
+
+    fun socketFactory(): SSLSocketFactory = factory
+
+    /** Forgets a refusal from an earlier connection, before trying again. */
+    fun clearRejection() {
+        rejected = null
     }
 
     /** What to show about a refused certificate, or null when the failure wasn't about the certificate. */
@@ -67,6 +79,18 @@ class ServerTrust(private val host: String, private val pinned: Collection<Strin
     }
 
     companion object {
+        private val shared = ConcurrentHashMap<String, ServerTrust>()
+
+        /**
+         * The checker for [host] with exactly these trusted certificates. A resumed session is only possible with the
+         * same checker, so trusting or forgetting a certificate (a different set) always starts with a full check.
+         */
+        fun forServer(host: String, pinned: Collection<String>): ServerTrust {
+            val set = pinned.toSortedSet()
+            val key = host.trim().lowercase(Locale.ROOT) + "|" + set.joinToString(",")
+            return shared.getOrPut(key) { ServerTrust(host, set) }
+        }
+
         fun fingerprint(cert: X509Certificate): String =
             MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString("") { "%02X".format(it) }
 

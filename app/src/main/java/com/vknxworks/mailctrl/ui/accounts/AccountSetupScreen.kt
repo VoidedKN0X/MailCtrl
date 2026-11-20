@@ -1,5 +1,7 @@
 package com.vknxworks.mailctrl.ui.accounts
 
+import androidx.compose.ui.res.pluralStringResource
+import com.vknxworks.mailctrl.mail.SpeedReport
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -155,6 +157,9 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
     var error by remember { mutableStateOf<String?>(null) }
     var untrusted by remember { mutableStateOf<UntrustedCertificateException?>(null) }
     var removing by remember { mutableStateOf(false) }
+    var measuring by remember { mutableStateOf(false) }
+    var speed by remember { mutableStateOf<SpeedReport?>(null) }
+    var speedError by remember { mutableStateOf<String?>(null) }
 
     fun applyPreset(address: String) {
         val p = Presets.forEmail(address)
@@ -399,6 +404,22 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
             }
             if (editing) {
                 Spacer(Modifier.height(8.dp))
+                CtrlSecondaryButton(
+                    stringResource(if (measuring) R.string.speed_measuring else R.string.speed_test),
+                    onClick = {
+                        if (measuring || existing == null) return@CtrlSecondaryButton
+                        measuring = true
+                        val id = existing.id
+                        scope.launch {
+                            runCatching { c.mail.speedTest(id) }
+                                .onSuccess { speed = it }
+                                .onFailure { speedError = it.friendlyMessage() }
+                            measuring = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
                 CtrlSecondaryButton(stringResource(R.string.account_remove), onClick = { removing = true }, modifier = Modifier.fillMaxWidth())
             }
             Text(
@@ -440,6 +461,16 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
         )
     }
 
+    speed?.let { r -> SpeedDialog(r) { speed = null } }
+    speedError?.let { msg ->
+        CtrlAlertDialog(
+            onDismissRequest = { speedError = null },
+            confirmButton = { TextButton(onClick = { speedError = null }) { Text(stringResource(R.string.close)) } },
+            title = { Text(stringResource(R.string.speed_title)) },
+            text = { Text(msg) },
+        )
+    }
+
     if (removing && existing != null) {
         ConfirmDialog(
             stringResource(R.string.account_remove_title, existing.title),
@@ -462,6 +493,53 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
         }
     }
 }
+
+/** What the speed test measured, and what it suggests. */
+@Composable
+private fun SpeedDialog(r: SpeedReport, onDismiss: () -> Unit) {
+    CtrlAlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        title = { Text(stringResource(R.string.speed_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                SpeedLine(stringResource(R.string.speed_lookup), r.lookupMs)
+                SpeedLine(stringResource(R.string.speed_sign_in), r.signInMs)
+                SpeedLine(stringResource(R.string.speed_round_trip), r.roundTripMs)
+                SpeedLine(stringResource(R.string.speed_open_inbox), r.openInboxMs)
+                SpeedLine(pluralStringResource(R.plurals.speed_list, r.listed, r.listed), r.listMs)
+                if (r.openMs != null) {
+                    SpeedLine(stringResource(R.string.speed_open_message, r.openKb ?: 0), r.openMs)
+                }
+                Spacer(Modifier.height(12.dp))
+                val notes = buildList {
+                    add(stringResource(if (r.compressed) R.string.speed_compressed else R.string.speed_not_compressed))
+                    if (!r.encrypted) add(stringResource(R.string.speed_unencrypted))
+                    when {
+                        r.roundTripMs > SLOW_ROUND_TRIP_MS -> add(stringResource(R.string.speed_hint_network))
+                        r.listMs > SLOW_LIST_MS || (r.openMs ?: 0) > SLOW_OPEN_MS -> add(stringResource(R.string.speed_hint_server))
+                        else -> add(stringResource(R.string.speed_hint_good))
+                    }
+                }
+                notes.forEach {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = CtrlColors.Muted, modifier = Modifier.padding(bottom = 6.dp))
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun SpeedLine(label: String, ms: Long) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = CtrlColors.Text, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.speed_ms, ms), style = MaterialTheme.typography.bodyMedium, color = CtrlColors.Muted)
+    }
+}
+
+private const val SLOW_ROUND_TRIP_MS = 150L
+private const val SLOW_LIST_MS = 2_000L
+private const val SLOW_OPEN_MS = 2_000L
 
 /** The account's colour: "automatic" (picked from the account) or one of the account colours. */
 @Composable

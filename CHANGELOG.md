@@ -4,6 +4,18 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## v0.2.2 (2026-11-20)
+
+### Changed
+
+- **Signing in is quicker after the first time.** Every new connection to your mail server used to start a brand-new secure session, with the full back-and-forth that takes. MailCtrl now resumes the secure session it already made with that server, which skips most of that exchange. It's kept per server and per set of certificates you trusted, so a certificate you trusted for one server is never reused for another.
+- **Less data over the network.** When your mail server offers compression (Gmail does), MailCtrl turns it on, so message lists and messages arrive compressed. This helps most on slow mobile data and over a VPN.
+- **MailCtrl signs in before you need it.** As soon as you open MailCtrl, it signs in to your accounts in the background, so the first folder or message you tap doesn't have to wait for a sign-in. After switching networks (Wi-Fi to mobile data, or the other way round) while MailCtrl is open, it drops the old connections and signs in again straight away, instead of waiting for the old ones to time out.
+
+### New
+
+- **Test connection speed.** In an account's settings (tap the profile picture, then the account), "Test connection speed" measures each step with your mail server on a fresh connection: finding the server, signing in, one round trip, opening the inbox, listing the newest 25 messages and downloading the newest one. It also shows whether compression is on. When something is slow it tells you where: a slow round trip means the network (for example a VPN that goes through a relay instead of connecting directly), while a quick round trip with slow listing or downloading means the server itself (for Proton through hydroxide, which fetches and decrypts every message from Proton when it's asked for). The test changes nothing and marks nothing as read.
+
 ## v0.2.1 (2026-11-20)
 
 ### Changed

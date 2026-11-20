@@ -511,4 +511,23 @@
         <item quantity="one">Key imported</item>
         <item quantity="other">%1$d keys imported</item>
     </plurals>
+    <string name="speed_test">Test connection speed</string>
+    <string name="speed_measuring">Measuring…</string>
+    <string name="speed_title">Connection speed</string>
+    <string name="speed_lookup">Finding the server</string>
+    <string name="speed_sign_in">Signing in</string>
+    <string name="speed_round_trip">Round trip</string>
+    <string name="speed_open_inbox">Opening the inbox</string>
+    <string name="speed_open_message">Downloading the newest message (%1$d KB)</string>
+    <string name="speed_ms">%1$d ms</string>
+    <string name="speed_compressed">Compression is on: the server sends less data.</string>
+    <string name="speed_not_compressed">The server doesn\'t offer compression.</string>
+    <string name="speed_unencrypted">This connection isn\'t encrypted, so it should only be used inside a VPN.</string>
+    <string name="speed_hint_network">The round trip is slow: every request waits on the network. If you reach this server through a VPN, check that it connects directly (with Tailscale, \"tailscale ping\" shows \"via DERP\" when traffic goes through a relay).</string>
+    <string name="speed_hint_server">The network is quick, but the server is slow to answer. hydroxide fetches and decrypts every message from Proton when it\'s asked for it; Proton Mail Bridge keeps a local copy and answers faster.</string>
+    <string name="speed_hint_good">The network and the server both answer quickly.</string>
+    <plurals name="speed_list">
+        <item quantity="one">Listing %1$d message</item>
+        <item quantity="other">Listing %1$d messages</item>
+    </plurals>
 </resources>

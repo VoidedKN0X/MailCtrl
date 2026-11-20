@@ -3,6 +3,7 @@ package com.vknxworks.mailctrl.mail
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.SystemClock
 import android.util.Base64
 import android.util.LruCache
 import com.sun.mail.imap.IMAPFolder
@@ -20,6 +21,7 @@ import com.vknxworks.mailctrl.str
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,6 +31,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.net.ConnectException
+import java.net.InetAddress
 import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -96,6 +99,23 @@ data class FolderSync(
     val removed: Set<Long>,
     /** After a [reset]: whether there are older messages than [fresh]. */
     val hasMore: Boolean,
+)
+
+/** What the speed test measured, in milliseconds (see [MailClient.speedTest]). */
+data class SpeedReport(
+    val lookupMs: Long,
+    val signInMs: Long,
+    val roundTripMs: Long,
+    val openInboxMs: Long,
+    val listMs: Long,
+    val listed: Int,
+    /** Downloading the newest message; null when it's too big for the test or the inbox is empty. */
+    val openMs: Long?,
+    val openKb: Int?,
+    /** The server compresses the connection. */
+    val compressed: Boolean,
+    /** The connection is encrypted (SSL/TLS or STARTTLS). */
+    val encrypted: Boolean,
 )
 
 /** Which connection an action uses: background syncing never makes you wait to open a message. */
@@ -238,7 +258,10 @@ class MailClient(private val context: Context, private val accounts: AccountStor
                 override fun onAvailable(network: Network) {
                     val before = last
                     last = network
-                    if (before != null && before != network) closeAll()
+                    if (before != null && before != network) {
+                        closeAll()
+                        onNetworkChanged?.invoke()
+                    }
                 }
 
                 override fun onLost(network: Network) {
@@ -299,6 +322,9 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             // Spare signed-in connections are kept for 5 minutes instead of 45 seconds. (MailCtrl uses one per lane,
             // which JavaMail keeps anyway; withStore signs in afresh after 5 idle minutes, see Link.stale.)
             p["$k.connectionpooltimeout"] = KEEP_MS.toString()
+            // Compress everything after signing in, when the server offers it (Gmail, Fastmail, Dovecot and most
+            // others): lists and messages are several times smaller, which is most of the wait on mobile data.
+            p["$k.compress.enable"] = "true"
         }
         p["mail.mime.address.strict"] = "false"
         p["mail.mime.decodetext.strict"] = "false"
@@ -352,7 +378,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
     }
 
     private fun connect(a: Account, password: String): IMAPStore {
-        val trust = ServerTrust(a.imap.host, a.trustedCerts)
+        val trust = ServerTrust.forServer(a.imap.host, a.trustedCerts).also { it.clearRejection() }
         val (session, proto) = session(a.imap, smtp = false, trust = trust)
         val store = session.getStore(proto) as IMAPStore
         try {
@@ -420,6 +446,81 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         Lane.entries.forEach { lane -> links.remove(key(accountId, lane))?.let { closeLater(it) } }
     }
 
+    /** Called after the phone moved to another network and the old connections were closed (set by the app). */
+    @Volatile
+    var onNetworkChanged: (() -> Unit)? = null
+
+    /**
+     * Signs in ahead of time, so the first thing you tap doesn't wait for it: each account's [Lane.USER] connection
+     * (refreshing the inbox signs in the other one). Connections already up are left as they are; while the app lock
+     * keeps passwords sealed, nothing happens.
+     */
+    suspend fun warmUp(accountIds: List<String>) = coroutineScope {
+        accountIds.forEach { id -> launch { runCatching { withStore(id, Lane.USER) { _, _ -> } } } }
+    }
+
+    /**
+     * How long each step with the server takes, measured on a separate, fresh connection: finding the server,
+     * signing in, one round trip, opening the inbox, listing its newest messages and downloading the newest one.
+     * Nothing is changed and nothing is marked read.
+     */
+    suspend fun speedTest(accountId: String): SpeedReport = withContext(Dispatchers.IO) {
+        val a = accounts.get(accountId) ?: throw MailException(str(R.string.error_no_account))
+        val password = passwordOf(a)
+        fun <T> timed(block: () -> T): Pair<T, Long> {
+            val start = SystemClock.elapsedRealtime()
+            val result = block()
+            return result to SystemClock.elapsedRealtime() - start
+        }
+        val lookup = timed { runCatching { InetAddress.getAllByName(a.imap.host) } }.second
+        val (store, signIn) = timed { connect(a, password) }
+        try {
+            val compressed = runCatching { store.hasCapability("COMPRESS=DEFLATE") }.getOrDefault(false)
+            val f = store.getFolder("INBOX") as IMAPFolder
+            val openInbox = timed { f.open(Folder.READ_ONLY) }.second
+            // The middle of three, so one slow answer doesn't skew it.
+            val roundTrip = (1..3).map { timed { f.doCommand(IMAPFolder.ProtocolCommand { p -> p.noop(); null }) }.second }.sorted()[1]
+            val total = f.messageCount
+            val (msgs, list) = timed {
+                if (total <= 0) {
+                    emptyArray<Message>()
+                } else {
+                    f.getMessages(maxOf(1, total - SPEED_LIST + 1), total).also { f.fetch(it, listProfile) }
+                }
+            }
+            var openMs: Long? = null
+            var openKb: Int? = null
+            (msgs.lastOrNull() as? IMAPMessage)?.let { m ->
+                val (bytes, ms) = timed {
+                    f.fetch(arrayOf<Message>(m), openProfile)
+                    val size = runCatching { m.size }.getOrDefault(-1)
+                    if (size in 0..WHOLE_MAX) ByteArrayOutputStream(size + 1024).also { m.writeTo(it) }.size() else -1
+                }
+                if (bytes >= 0) {
+                    openMs = ms
+                    openKb = (bytes + 1023) / 1024
+                }
+            }
+            runCatching { f.close(false) }
+            SpeedReport(
+                lookupMs = lookup,
+                signInMs = signIn,
+                roundTripMs = roundTrip,
+                openInboxMs = openInbox,
+                listMs = list,
+                listed = msgs.size,
+                openMs = openMs,
+                openKb = openKb,
+                compressed = compressed,
+                encrypted = a.imap.security != Security.NONE,
+            )
+        } catch (e: Exception) {
+            throw translate(e, null)
+        } finally {
+            runCatching { store.close() }
+        }
+    }
+
     /** Whether the server can [cap], asked on [f]'s own connection (no second sign-in, no network traffic). */
     private fun IMAPFolder.can(cap: String): Boolean =
         runCatching { doCommand(IMAPFolder.ProtocolCommand { p -> p.hasCapability(cap) }) as? Boolean }.getOrNull() ?: false
@@ -441,7 +542,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
     }
 
     private fun testSmtp(a: Account, password: String) {
-        val trust = ServerTrust(a.smtp.host, a.trustedCerts)
+        val trust = ServerTrust.forServer(a.smtp.host, a.trustedCerts).also { it.clearRejection() }
         val (session, proto) = session(a.smtp, smtp = true, trust = trust, from = a.email)
         val t = session.getTransport(proto)
         try {
@@ -1278,7 +1379,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
     suspend fun send(accountId: String, out: OutgoingMessage): Boolean = withContext(Dispatchers.IO) {
         val a = accounts.get(accountId) ?: throw MailException(str(R.string.error_no_account))
         val password = passwordOf(a)
-        val trust = ServerTrust(a.smtp.host, a.trustedCerts)
+        val trust = ServerTrust.forServer(a.smtp.host, a.trustedCerts).also { it.clearRejection() }
         val (session, proto) = session(a.smtp, smtp = true, trust = trust, from = a.email)
         val mime = try {
             build(session, a, out)
@@ -1339,6 +1440,9 @@ class MailClient(private val context: Context, private val accounts: AccountStor
 
         /** Messages up to this size are downloaded whole in one request when opened. */
         private const val WHOLE_MAX = 900 * 1024
+
+        /** Messages listed by the speed test. */
+        private const val SPEED_LIST = 25
 
         /** Only messages up to this size are read ahead. */
         private const val PREFETCH_MAX = 300 * 1024
