@@ -22,8 +22,8 @@ android {
         minSdk = 35
         targetSdk = 36
         // Bump both to publish a new release (see CHANGELOG.md).
-        versionCode = 14
-        versionName = "0.2.3"
+        versionCode = 15
+        versionName = "0.2.4"
         // 64-bit ARM phones only (arm64-v8a), like every Ctrl app.
         ndk { abiFilters += listOf("arm64-v8a") }
     }

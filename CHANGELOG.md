@@ -4,9 +4,9 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
-## Unreleased
+## v0.2.4 (2026-11-20)
 
-Changes on `main` that aren't in a release yet. They ship with the next version.
+Built and checked by CI only: nothing in this release had been run on a phone when it was published.
 
 ### Security
 
