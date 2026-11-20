@@ -88,6 +88,9 @@ class MailCache(
     private val addrList = ListSerializer(Address.serializer())
 
     init {
+        // Write-ahead logging: a list on screen can be read while a refresh is writing, instead of waiting for it.
+        // The lists stay in the same database; SQLite keeps `-wal` and `-shm` files next to it.
+        setWriteAheadLoggingEnabled(true)
         // Lists from before encryption are sealed in the background, the first time the cache is used.
         scope.launch { runCatching { sealOrdinaryRows() } }
     }
