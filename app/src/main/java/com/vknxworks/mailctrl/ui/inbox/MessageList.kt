@@ -57,6 +57,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -138,11 +139,21 @@ fun MessageList(
 
     // Swiped away (archive, delete): hidden at once, done for real once the Undo bar is gone.
     val pending = remember { mutableStateListOf<String>() }
-    val shown = remember(headers, pending.toList()) { headers.filter { it.key !in pending } }
+    // Worked out again only when the list, what was swiped away or the selection changes (not on every redraw),
+    // and looked up in a set instead of going through a list for every message.
+    val shown by remember(headers) {
+        derivedStateOf {
+            if (pending.isEmpty()) headers else pending.toSet().let { gone -> headers.filter { it.key !in gone } }
+        }
+    }
     val keys = remember(headers) { headers.map { it.key }.toSet() }
     LaunchedEffect(keys) { selection.retainAll { it in keys } }
     BackHandler(enabled = selection.isNotEmpty()) { selection.clear() }
-    val chosen = headers.filter { it.key in selection }
+    val chosen by remember(headers) {
+        derivedStateOf {
+            if (selection.isEmpty()) emptyList() else selection.toSet().let { picked -> headers.filter { it.key in picked } }
+        }
+    }
 
     /** Shows the Undo bar; [commit] runs once it's gone without Undo, [undo] when Undo is tapped. */
     fun offerUndo(message: String, undo: () -> Unit, commit: () -> Unit) {
@@ -222,7 +233,7 @@ fun MessageList(
                         state = state,
                         contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp + LocalBottomClearance.current),
                     ) {
-                        itemsIndexed(shown, key = { _, h -> h.key }) { index, h ->
+                        itemsIndexed(shown, key = { _, h -> h.key }, contentType = { _, _ -> "message" }) { index, h ->
                             val row: @Composable (Modifier) -> Unit = { mod ->
                                 MessageRow(
                                     first = index == 0,
@@ -248,7 +259,7 @@ fun MessageList(
                             }
                         }
                         if (loadingMore) {
-                            item {
+                            item(contentType = "loading") {
                                 Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
                                     CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = CtrlColors.AccentText)
                                 }

@@ -11,6 +11,7 @@ Built and checked by CI only: nothing in this section has been run on a phone.
 ### Changed
 
 - **A lighter start.** The list of your accounts (a small file, and decoding it) was read on the main thread before anything else could happen, at every start of MailCtrl, also the background ones for a mail check or a push. It is now read on a separate thread while the rest of the app starts. Everything that uses the list waits until it has been read, so MailCtrl can never mistake "not read yet" for "no accounts" and show the welcome screen.
+- **Smoother message lists.** On every redraw of a list MailCtrl made a copy of the swiped-away messages and went through the whole list again to find the selected ones. Both are now only worked out when the list, the swiped-away messages or the selection actually change, and rows tell Android what kind of row they are so they are reused while scrolling. What you see is the same.
 
 ### Fixed
 
