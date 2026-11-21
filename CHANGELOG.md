@@ -10,6 +10,7 @@ Changes on `main` that aren't in a release yet. They ship with the next version.
 
 ### Project
 
+- **Checksum list regenerated without the old entries.** `gradle/verification-metadata.xml` was regenerated on CI with the fixed workflow and committed exactly as printed (its SHA-256 matches the log). It now lists only the 444 components the build downloads today; the leftovers from earlier library and build-tool versions are gone.
 - **The checksum list no longer collects old entries.** The hand-started workflow that regenerates `gradle/verification-metadata.xml` used to add the new checksums to the existing file, so entries for library versions that are no longer used stayed in it. It now clears the old entries first and writes only what the build uses, and prints the file's SHA-256 so the copy that gets committed can be checked against the log. Nothing in the app changes.
 ## v0.4.0 (2026-11-21)
 
