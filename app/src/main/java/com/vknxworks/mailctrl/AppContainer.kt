@@ -174,7 +174,9 @@ class AppContainer(val context: Context) {
         appScope.launch {
             runCatching {
                 val now = System.currentTimeMillis()
-                outbox.load().filter { it.sendAt <= now }.forEach { item ->
+                // Only the ones that were waiting for the unlock: anything else that failed waits for "Send now".
+                val locked = str(R.string.later_locked)
+                outbox.load().filter { it.sendAt <= now && it.error == locked }.forEach { item ->
                     outbox.reschedule(item.id, now)
                     LaterWork.send(context, item.id, now)
                 }
@@ -309,7 +311,8 @@ class AppContainer(val context: Context) {
                 } else {
                     val savedSent = mail.send(draft.accountId, out)
                     drafts.delete(draft.id)
-                    afterSent(draft)
+                    // It's gone: a hiccup in what follows must not report it as not sent.
+                    runCatching { afterSent(draft) }
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, str(if (savedSent) R.string.sent else R.string.sent_no_copy), Toast.LENGTH_SHORT).show()
                     }

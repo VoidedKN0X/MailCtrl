@@ -14,6 +14,8 @@ import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.mail.LockedException
 import com.vknxworks.mailctrl.ui.components.friendlyMessage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.UnknownHostException
@@ -89,7 +91,8 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 }
             }
         } catch (e: CancellationException) {
-            runCatching { c.outbox.finish(id, sent = false, error = item.error) }
+            // Stopped by Android before it went out: it stays listed as it was, and can be sent or cancelled again.
+            withContext(NonCancellable) { runCatching { c.outbox.finish(id, sent = false, error = item.error) } }
             throw e
         } catch (e: LockedException) {
             error = applicationContext.getString(R.string.later_locked)
