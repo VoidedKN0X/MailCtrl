@@ -13,11 +13,14 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 ## Features
 
 - **Several accounts**, each with its own name, colour, signature and notifications
+- **Identities and aliases**: other addresses to send from with the same account, each with its own name and signature
 - **All inboxes**: every account's inbox together, newest first, each message tagged with its account's name and colour; or one account at a time. Each account chooses whether it's in it
 - **OpenPGP encryption built in**: read and send encrypted and signed mail (PGP/MIME), make or import your own keys, import your contacts' keys from files, attachments or Autocrypt, no other app needed (see [Encrypted mail (OpenPGP)](#encrypted-mail-openpgp))
 - **All your folders**, with unread counts; Sent, Drafts, Archive, Junk and Trash are found by themselves
-- **Read mail safely**: HTML messages are shown without scripts, and pictures from the internet stay blocked until you tap **Load** (see [Reading mail](#reading-mail))
+- **Read mail safely**: HTML messages are shown without scripts, and pictures from the internet stay blocked until you tap **Load**, or **Always from this sender** for senders you pick (see [Reading mail](#reading-mail))
+- **Dark messages**: HTML mail is shown dark while the app is dark
 - **Write, reply, reply all and forward**, with Cc and Bcc, attachments from any app, and the original attachments when forwarding
+- **Recipient suggestions** from the addresses you've mailed before, with no contacts permission
 - **Drafts** kept on the phone, encrypted, so a message you started is never lost
 - **Attachments**: open them in another app, share them or save them wherever you like
 - **Archive, delete, flag, mark read or unread and move** messages; select several at once with a long press
@@ -92,7 +95,8 @@ Then:
 ## Reading mail
 
 - **HTML messages** are shown in a locked-down viewer: no JavaScript, no frames, no forms, no access to files on the phone, and a strict content policy on top. Links never open by themselves: tapping one shows where it really goes and asks before opening it in your browser.
-- **Pictures from the internet** are blocked, because loading them tells the sender when and where you opened the message (that's how tracking pixels work). Tap **Load** to show them for that message, or choose **Always load** in Settings. Pictures sent inside the message always show.
+- **Pictures from the internet** are blocked, because loading them tells the sender when and where you opened the message (that's how tracking pixels work). Tap **Load** to show them for that message, **Always from this sender** to load that sender's pictures by themselves from then on (nobody is on that list until you add them; Settings › Reading › **Senders whose pictures always load** shows and edits it), or choose **Always load** in Settings for all mail. Pictures sent inside the message always show.
+- **Dark messages:** while MailCtrl is dark, HTML messages are shown with their colours turned around (light text on a dark page) and their pictures left as they are. A message that looks wrong that way can be switched back from its menu (**Show original colours**); Settings › Reading › **Dark messages** turns it off.
 - **Plain-text messages** show as text, with links and addresses you can tap (they ask first too).
 - **Unsubscribe**: when a newsletter offers it, it's in the message's menu.
 - MailCtrl keeps a **list of your messages** on the phone (sender, subject, date, flags) so it opens instantly, and refreshes it by downloading only what changed, in as few requests as possible. Sender, recipients and subject are encrypted in that list (AES-256-GCM, with a key protected by the phone's secure hardware); folder names, dates and flags are not, because the list is sorted and filtered by them.
@@ -105,7 +109,7 @@ MailCtrl encrypts, decrypts, signs and checks signatures itself (with [Bouncy Ca
 - **Your key:** under your profile picture › **OpenPGP keys**, make one (Curve25519, or RSA 4096 for very old software) or import the one you already use. Pick it for an account in the account's settings. Secret keys never leave the phone: they're encrypted with its secure hardware and still protected by their own passphrase inside that. Only public keys can be shared or saved.
 - **Passphrase:** remembered in memory only, for 5 minutes by default (Settings › OpenPGP › **Remember passphrase**, from "Don't remember" to "Until MailCtrl locks or closes"), and always forgotten when the app lock locks.
 - **Reading:** encrypted messages (PGP/MIME, or an inline `-----BEGIN PGP MESSAGE-----` block) are decrypted on the phone, attachments included. Messages encrypted without an integrity check are refused, because they can be tampered with. Signatures show as **Signed by …** (valid), **Signed with an unknown key** (you don't have the signer's key), or **Bad signature** (changed after signing, or forged), with a warning when the key is for another address or has expired.
-- **Writing:** the **Encrypt** and **Sign** switches under the subject work per message, and send PGP/MIME. Encrypting needs a key for every recipient; MailCtrl says which are missing and never falls back to sending unencrypted. Everything is encrypted to your own key too, so you can read it in Sent. The subject isn't encrypted.
+- **Writing:** the **Encrypt** and **Sign** switches under the subject work per message, and send PGP/MIME. Encrypting needs a key for every recipient; MailCtrl says which are missing and never falls back to sending unencrypted. Everything is encrypted to your own key too, so you can read it in Sent. The subject is encrypted too (Settings › OpenPGP › **Encrypt the subject too**, on by default): the real subject travels inside the encrypted part, in the "protected headers" format Thunderbird and K-9 Mail also use, and the outside of the message only says "...". Lists show "..." for such a message until you open it.
 - **Contacts' keys:** import them from a file, from a key attached to a message, or from the sender's Autocrypt header (MailCtrl offers it; you tap **Import**). Compare the fingerprint with the person before relying on a key.
 - **Look up a key:** when a key is missing, **Look up** asks the person's own mail domain for it ([Web Key Directory](https://wiki.gnupg.org/WKD)). Only when you tap it, after MailCtrl tells you which domain it will contact. Turn the button off in Settings › OpenPGP.
 - **Autocrypt:** turn on **Send my key** in an account's settings to put your public key in every message you send, so people can write back encrypted. Off until you turn it on.
@@ -191,7 +195,7 @@ Every permission MailCtrl has, and what it's for:
 | Biometrics (`USE_BIOMETRIC`) | Optional fingerprint unlock for the app lock |
 | Hide other apps' floating windows (`HIDE_OVERLAY_WINDOWS`) | Hide other apps' floating windows over the PIN screen, the lock screen and confirmations, so nothing can be drawn over them to trick a tap |
 
-Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`) that AndroidX adds to every app so only MailCtrl itself can send it internal broadcasts; it gives the app no access to anything. MailCtrl has no contacts, location, camera, microphone, storage or phone permissions: attachments come in through Android's file picker or "Share to MailCtrl".
+Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`) that AndroidX adds to every app so only MailCtrl itself can send it internal broadcasts; it gives the app no access to anything. MailCtrl has no contacts, location, camera, microphone, storage or phone permissions: attachments come in through Android's file picker or "Share to MailCtrl", and recipient suggestions come only from addresses you've sent mail to from MailCtrl.
 
 ## Privacy
 
@@ -205,7 +209,7 @@ Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORT
 - **Encrypted connections** (SSL/TLS or STARTTLS) are checked like a browser does. A server whose certificate the phone doesn't trust is refused unless you trust that exact certificate yourself. STARTTLS is required, never optional: a server that suddenly stops offering it is refused rather than used unencrypted. "None" is only for servers on your own network or over a VPN.
 - **No tracking pixels:** pictures from the internet stay blocked unless you load them, and the message viewer never looks links up online.
 - **The phone's name stays private:** MailCtrl greets mail servers with a neutral address instead of your phone's name, makes Message-IDs without the app's name in them, and adds no "sent with" header.
-- **On the phone:** your accounts, settings, drafts (encrypted), the list of your messages (senders, recipients and subjects encrypted; folder names, dates and flags not), and copies of recent messages (encrypted; turn off **Keep messages on this phone** to keep them in memory only). Downloaded attachments are cleared when MailCtrl starts again. Decrypted OpenPGP messages are kept in memory only, never written to storage, and forgotten when MailCtrl locks or closes.
+- **On the phone:** your accounts, settings, drafts (encrypted), the addresses you've mailed (for suggestions) and the senders whose pictures always load (both encrypted), the list of your messages (senders, recipients and subjects encrypted; folder names, dates and flags not), and copies of recent messages (encrypted; turn off **Keep messages on this phone** to keep them in memory only). Downloaded attachments are cleared when MailCtrl starts again. Decrypted OpenPGP messages are kept in memory only, never written to storage, and forgotten when MailCtrl locks or closes.
 - **Links:** the **Make an app password** button opens your provider's own page (myaccount.google.com, login.yahoo.com or account.apple.com) in your browser, the **Install ntfy** button (when ntfy is missing) opens ntfy's page on f-droid.org, and the Support, Report a bug, Source code and Licence rows open GitHub or gnu.org. Only when you tap them; MailCtrl itself never contacts these sites.
 - **Message viewer:** HTML mail is shown in a locked-down web view with no scripts, forms or frames and no online link checks or usage reports. Links in a message ask before they open in your browser.
 - **No automatic backups:** Android doesn't back up MailCtrl's data or move it to a new phone. Your mail stays on your servers; on a new phone you just sign in again.

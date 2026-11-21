@@ -61,6 +61,7 @@ import javax.mail.StoreClosedException
 import javax.mail.UIDFolder
 import javax.mail.internet.ContentType
 import javax.mail.internet.InternetAddress
+import javax.mail.internet.MailDateFormat
 import javax.mail.internet.MimeBodyPart
 import javax.mail.internet.MimeMessage
 import javax.mail.internet.MimeMultipart
@@ -1452,19 +1453,23 @@ class MailClient(private val context: Context, private val accounts: AccountStor
     }
 
     private fun build(session: Session, a: Account, out: OutgoingMessage): MimeMessage {
-        val domain = a.email.substringAfterLast('@').ifBlank { "localhost" }
+        // The account's own address, or one of its identities.
+        val from = a.sender(out.from)
+        val domain = from.email.substringAfterLast('@').ifBlank { "localhost" }
         val m = OutgoingMime(session, domain)
-        m.setFrom(InternetAddress(a.email, a.senderName.ifBlank { null }, "UTF-8"))
+        m.setFrom(InternetAddress(from.email, from.name.ifBlank { null }, "UTF-8"))
         fun list(l: List<Address>) = l.map { InternetAddress(it.email, it.name.ifBlank { null }, "UTF-8") }.toTypedArray<javax.mail.Address>()
         if (out.to.isNotEmpty()) m.setRecipients(Message.RecipientType.TO, list(out.to))
         if (out.cc.isNotEmpty()) m.setRecipients(Message.RecipientType.CC, list(out.cc))
         if (out.bcc.isNotEmpty()) m.setRecipients(Message.RecipientType.BCC, list(out.bcc))
-        m.setSubject(out.subject, "UTF-8")
+        val pgp = out.pgp
+        // Encrypted with the subject protected: the outside only says "...", the real one travels inside.
+        val hideSubject = out.protectSubject && pgp != null && pgp.encryptTo.isNotEmpty() && out.subject.isNotBlank()
+        m.setSubject(if (hideSubject) HIDDEN_SUBJECT else out.subject, "UTF-8")
         m.sentDate = Date()
         // Both come from the message being answered, so they're put on one clean line first.
         out.inReplyTo?.unfoldedHeader()?.takeIf { it.isNotBlank() }?.let { m.setHeader("In-Reply-To", it) }
         out.references?.unfoldedHeader()?.takeIf { it.isNotBlank() }?.let { m.setHeader("References", MimeUtility.fold(12, it)) }
-        val pgp = out.pgp
         if (pgp == null) {
             fillContent(m, out, protect = false)
         } else {
@@ -1472,6 +1477,19 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             // encryption), or signed as it is.
             val inner = PgpMime.Inner()
             fillContent(inner, out, protect = true)
+            if (hideSubject) {
+                // "Protected headers" (draft-autocrypt-lamps-protected-headers): the inner part is marked
+                // protected-headers="v1" and carries the real Subject (with From, To and Cc), which Thunderbird,
+                // K-9 and MailCtrl itself show instead of the outer "...".
+                inner.finish()
+                val ct = ContentType(inner.contentType)
+                ct.setParameter("protected-headers", "v1")
+                inner.setHeader("Content-Type", ct.toString())
+                inner.setHeader("Subject", MimeUtility.fold(9, MimeUtility.encodeText(out.subject, "UTF-8", null)))
+                inner.setHeader("From", InternetAddress(from.email, from.name.ifBlank { null }, "UTF-8").toString())
+                if (out.to.isNotEmpty()) inner.setHeader("To", MimeUtility.fold(4, InternetAddress.toString(list(out.to))))
+                if (out.cc.isNotEmpty()) inner.setHeader("Cc", MimeUtility.fold(4, InternetAddress.toString(list(out.cc))))
+            }
             val bytes = PgpMime.serialize(inner)
             if (pgp.encryptTo.isNotEmpty()) {
                 m.setContent(PgpMime.encrypted(PgpEngine.encrypt(bytes, pgp.encryptTo, pgp.signer)))
@@ -1520,9 +1538,12 @@ class MailClient(private val context: Context, private val accounts: AccountStor
      * a crafted message being answered) add headers, recipients or commands of their own.
      */
     private fun requireCleanHeaders(a: Account, out: OutgoingMessage) {
+        val from = a.sender(out.from)
         val values = buildList {
             add(a.email)
             add(a.senderName)
+            add(from.email)
+            add(from.name)
             (out.to + out.cc + out.bcc).forEach { add(it.email); add(it.name) }
             add(out.subject)
             out.attachments.forEach { add(it.name); add(it.mimeType) }
@@ -1539,7 +1560,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         requireCleanHeaders(a, out)
         val password = passwordOf(a)
         val trust = ServerTrust.forServer(a.smtp.host, a.trustedCerts).also { it.clearRejection() }
-        val (session, proto) = session(a.smtp, smtp = true, trust = trust, from = a.email)
+        val (session, proto) = session(a.smtp, smtp = true, trust = trust, from = a.sender(out.from).email)
         val mime = try {
             build(session, a, out)
         } catch (e: PgpFailure) {
@@ -1560,6 +1581,65 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         val sent = a.sentFolder ?: return@withContext false
         runCatching {
             // On the sync connection, which has no folder open, so appending needs no extra sign-in.
+            withStore(accountId, Lane.SYNC) { _, link ->
+                val f = link.store.getFolder(sent)
+                mime.setFlag(Flags.Flag.SEEN, true)
+                f.appendMessages(arrayOf<Message>(mime))
+            }
+        }.isSuccess
+    }
+
+    /**
+     * [out] exactly as it will be sent (signed or encrypted now, attachments included), for a message that is
+     * sent later: [sendPrepared] sends these bytes. Nothing is sent and no server is contacted.
+     */
+    suspend fun prepare(accountId: String, out: OutgoingMessage): ByteArray = withContext(Dispatchers.IO) {
+        val a = accounts.get(accountId) ?: throw MailException(str(R.string.error_no_account))
+        requireCleanHeaders(a, out)
+        val trust = ServerTrust.forServer(a.smtp.host, a.trustedCerts)
+        val (session, _) = session(a.smtp, smtp = true, trust = trust, from = a.sender(out.from).email)
+        try {
+            val mime = build(session, a, out)
+            ByteArrayOutputStream().also { mime.writeTo(it) }.toByteArray()
+        } catch (e: PgpFailure) {
+            throw MailException(e.friendly(), e)
+        } catch (e: Exception) {
+            throw MailException(str(R.string.error_build), e)
+        }
+    }
+
+    /**
+     * Sends a message made by [prepare], with the date of now. Its content isn't touched, so a signature made
+     * when it was prepared still matches. Returns false when it was sent but the copy for the Sent folder
+     * couldn't be saved.
+     */
+    suspend fun sendPrepared(accountId: String, raw: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        val a = accounts.get(accountId) ?: throw MailException(str(R.string.error_no_account))
+        val password = passwordOf(a)
+        val trust = ServerTrust.forServer(a.smtp.host, a.trustedCerts).also { it.clearRejection() }
+        val sender = runCatching {
+            (MimeMessage(parseSession, ByteArrayInputStream(raw)).from?.firstOrNull() as? InternetAddress)?.address
+        }.getOrNull()?.takeIf { a.isOwn(it) } ?: a.email
+        val (session, proto) = session(a.smtp, smtp = true, trust = trust, from = sender)
+        val mime = try {
+            MimeMessage(session, ByteArrayInputStream(raw)).apply { setHeader("Date", MailDateFormat().format(Date())) }
+        } catch (e: Exception) {
+            throw MailException(str(R.string.error_build), e)
+        }
+        val recipients = mime.allRecipients
+        if (recipients == null || recipients.isEmpty()) throw MailException(str(R.string.no_recipient))
+        val t = session.getTransport(proto)
+        try {
+            t.connect(a.smtp.host, a.smtp.port, a.smtp.username, password)
+            t.sendMessage(mime, recipients)
+        } catch (e: Exception) {
+            throw translate(e, trust)
+        } finally {
+            runCatching { t.close() }
+        }
+        if (!a.saveSent) return@withContext true
+        val sent = a.sentFolder ?: return@withContext false
+        runCatching {
             withStore(accountId, Lane.SYNC) { _, link ->
                 val f = link.store.getFolder(sent)
                 mime.setFlag(Flags.Flag.SEEN, true)
@@ -1623,6 +1703,9 @@ class MailClient(private val context: Context, private val accounts: AccountStor
 
         /** An Autocrypt header longer than this isn't a key MailCtrl wants (a normal one is a few kilobytes). */
         private const val AUTOCRYPT_MAX = 64 * 1024
+
+        /** What the outside of a message says in place of an encrypted subject (as Thunderbird and K-9 do). */
+        const val HIDDEN_SUBJECT = "..."
 
         /** Attachments inside a decrypted message: their part path, marked so they're read from the decrypted copy. */
         const val PGP_PATH = "pgp:"

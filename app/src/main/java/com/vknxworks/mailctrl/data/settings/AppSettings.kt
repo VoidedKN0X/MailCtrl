@@ -101,6 +101,18 @@ data class AppSettings(
     val pgpPassphrase: PassphraseMemory = PassphraseMemory.MINUTES_5,
     /** "Look up key" (Web Key Directory) is offered; it asks the recipient's domain, only when you tap it. */
     val wkdLookup: Boolean = true,
+    /** HTML messages are shown dark while MailCtrl is dark. */
+    val darkMessages: Boolean = true,
+    /** Addresses you have mailed are suggested while you type a recipient. */
+    val suggestRecipients: Boolean = true,
+    /** Lists show a conversation (a message and its answers) as one row. */
+    val conversations: Boolean = true,
+    /** Seconds a message waits before it's really sent, so you can still stop it; 0 = sent at once. */
+    val undoSend: Int = 0,
+    /** With OpenPGP encryption, the subject is encrypted too (the outside only shows "..."). */
+    val encryptSubject: Boolean = true,
+    /** A connection to each inbox stays open in the background, so new mail is told at once (IMAP IDLE). */
+    val idle: Boolean = false,
 ) {
     /** The notification content in effect: the user's own choice, or the default for the app lock's state. */
     fun notificationContentFor(lockOn: Boolean): NotificationContent =
@@ -129,6 +141,12 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val defaultAccount = stringPreferencesKey("default_account")
         val pgpPassphrase = stringPreferencesKey("pgp_passphrase")
         val wkdLookup = booleanPreferencesKey("wkd_lookup")
+        val darkMessages = booleanPreferencesKey("dark_messages")
+        val suggestRecipients = booleanPreferencesKey("suggest_recipients")
+        val conversations = booleanPreferencesKey("conversations")
+        val undoSend = intPreferencesKey("undo_send")
+        val encryptSubject = booleanPreferencesKey("encrypt_subject")
+        val idle = booleanPreferencesKey("imap_idle")
     }
 
     val settings: StateFlow<AppSettings> = context.appDataStore.data
@@ -160,6 +178,12 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         defaultAccount = this[K.defaultAccount] ?: "",
         pgpPassphrase = enumOr(this[K.pgpPassphrase], PassphraseMemory.MINUTES_5),
         wkdLookup = this[K.wkdLookup] ?: true,
+        darkMessages = this[K.darkMessages] ?: true,
+        suggestRecipients = this[K.suggestRecipients] ?: true,
+        conversations = this[K.conversations] ?: true,
+        undoSend = (this[K.undoSend] ?: 0).coerceIn(0, 60),
+        encryptSubject = this[K.encryptSubject] ?: true,
+        idle = this[K.idle] ?: false,
     )
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
@@ -186,6 +210,12 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             p[K.defaultAccount] = s.defaultAccount
             p[K.pgpPassphrase] = s.pgpPassphrase.name
             p[K.wkdLookup] = s.wkdLookup
+            p[K.darkMessages] = s.darkMessages
+            p[K.suggestRecipients] = s.suggestRecipients
+            p[K.conversations] = s.conversations
+            p[K.undoSend] = s.undoSend.coerceIn(0, 60)
+            p[K.encryptSubject] = s.encryptSubject
+            p[K.idle] = s.idle
         }
     }
 

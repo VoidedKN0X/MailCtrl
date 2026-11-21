@@ -10,6 +10,8 @@ import com.vknxworks.mailctrl.data.crypto.DataKeyStore
 import com.vknxworks.mailctrl.data.crypto.KeystoreKeyWrapper
 import com.vknxworks.mailctrl.data.drafts.Draft
 import com.vknxworks.mailctrl.data.drafts.DraftStore
+import com.vknxworks.mailctrl.data.local.MailedAddresses
+import com.vknxworks.mailctrl.data.local.PictureSenders
 import com.vknxworks.mailctrl.data.lock.LockVault
 import com.vknxworks.mailctrl.data.pgp.PgpKeyStore
 import com.vknxworks.mailctrl.data.pgp.PgpService
@@ -57,7 +59,11 @@ class AppContainer(val context: Context) {
     val accounts = AccountStore(context, vault)
     // Made when first needed, so starting the app (or a background check) doesn't open what it won't use.
     // The data key encrypts the message list at rest; it's only read (off the main thread) when the list is.
-    val cache by lazy { MailCache(context, DataKeyStore(context.noBackupFilesDir, KeystoreKeyWrapper()), appScope) }
+    private val dataKey = DataKeyStore(context.noBackupFilesDir, KeystoreKeyWrapper())
+    val cache by lazy { MailCache(context, dataKey, appScope) }
+    /** Senders whose pictures always load, and the addresses you've mailed (for suggestions): encrypted, on the phone only. */
+    val pictureSenders by lazy { PictureSenders(context.noBackupFilesDir, dataKey, appScope) }
+    val mailed by lazy { MailedAddresses(context.noBackupFilesDir, dataKey, appScope) }
     /** Messages kept on the phone, encrypted, so they open without the server. */
     val messages by lazy { com.vknxworks.mailctrl.mail.MessageStore(context) }
     val mail by lazy { MailClient(context, accounts, messages) }
@@ -169,10 +175,15 @@ class AppContainer(val context: Context) {
                         inReplyTo = draft.inReplyTo,
                         references = draft.references,
                         pgp = protection,
-                        autocrypt = pgp.autocryptHeader(account),
+                        // The key in an Autocrypt header is for the account's own address, not for an identity.
+                        autocrypt = if (account.sender(draft.from).email.equals(account.email, ignoreCase = true)) pgp.autocryptHeader(account) else null,
+                        from = draft.from,
+                        protectSubject = settings.current().encryptSubject,
                     ),
                 )
                 drafts.delete(draft.id)
+                // Remembered for suggestions the next time you write (only addresses you mailed yourself).
+                if (settings.current().suggestRecipients) runCatching { mailed.record(draft.to + draft.cc + draft.bcc) }
                 val folder = draft.replyFolder
                 val uid = draft.replyUid
                 if (folder != null && uid != null) actions.markAnswered(draft.accountId, folder, uid)

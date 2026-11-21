@@ -535,4 +535,41 @@
         <item quantity="one">Listing %1$d message</item>
         <item quantity="other">Listing %1$d messages</item>
     </plurals>
+    <!-- 0.5.0: pictures per sender, dark messages, suggestions, identities -->
+    <string name="remote_sender_always">Always from this sender</string>
+    <string name="remote_sender_stop">Stop always loading this sender\'s pictures</string>
+    <string name="dark_message_off">Show original colours</string>
+    <string name="dark_message_on">Show dark</string>
+    <string name="dark_messages">Dark messages</string>
+    <string name="dark_messages_subtitle">HTML messages are shown dark while MailCtrl is dark. A message\'s menu switches it back to its own colours.</string>
+    <string name="picture_senders">Senders whose pictures always load</string>
+    <string name="picture_senders_none">Nobody yet. Tap \"Always from this sender\" on a message with blocked pictures to add its sender.</string>
+    <plurals name="picture_senders_n">
+        <item quantity="one">%1$d sender</item>
+        <item quantity="other">%1$d senders</item>
+    </plurals>
+    <string name="group_writing">Writing</string>
+    <string name="suggest_recipients">Suggest recipients</string>
+    <string name="suggest_recipients_subtitle">While you type, offers addresses you\'ve sent mail to. MailCtrl never reads your contacts.</string>
+    <string name="suggestion_forget">Forget this address</string>
+    <string name="mailed_forget">Forget remembered addresses</string>
+    <plurals name="mailed_n">
+        <item quantity="one">%1$d address remembered, encrypted on the phone</item>
+        <item quantity="other">%1$d addresses remembered, encrypted on the phone</item>
+    </plurals>
+    <string name="mailed_forget_title">Forget every remembered address?</string>
+    <string name="mailed_forget_body">Suggestions start over with the next message you send. Your mail isn\'t touched.</string>
+    <string name="mailed_forget_confirm">Forget</string>
+    <string name="identities_title">Identities</string>
+    <string name="identities_footer">Other addresses you send from with this account, such as an alias. Mail still goes out through this account\'s server, which must allow the address (Gmail: add it under \"Send mail as\" first; Proton: use an address of your Proton account).</string>
+    <string name="identity_add">Add an identity</string>
+    <string name="identity_edit">Change identity</string>
+    <string name="identity_email">Address</string>
+    <string name="identity_name">Name (optional)</string>
+    <string name="identity_signature">Signature (optional)</string>
+    <string name="identity_bad">That isn\'t a valid address or name.</string>
+    <string name="identity_taken">This account already sends from that address.</string>
+    <string name="pgp_encrypt_subject">Encrypt the subject too</string>
+    <string name="pgp_encrypt_subject_subtitle">In an encrypted message the real subject travels inside the encryption; mail servers and the message list only see \"...\". Thunderbird, K-9 Mail and MailCtrl show the real subject once the message is decrypted.</string>
+    <string name="pgp_compose_subject_encrypted">The subject is encrypted too: outside the message it only says \"...\".</string>
 </resources>

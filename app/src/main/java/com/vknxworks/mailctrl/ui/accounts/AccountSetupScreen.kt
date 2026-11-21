@@ -77,7 +77,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.container
+import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Close
 import com.vknxworks.mailctrl.data.accounts.Account
+import com.vknxworks.mailctrl.data.accounts.Identity
+import com.vknxworks.mailctrl.mail.hasControlChars
 import com.vknxworks.mailctrl.data.accounts.Presets
 import com.vknxworks.mailctrl.mail.AuthException
 import com.vknxworks.mailctrl.mail.Security
@@ -148,6 +152,9 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
     var autocrypt by rememberSaveable { mutableStateOf(existing?.autocrypt ?: false) }
     var color by rememberSaveable { mutableIntStateOf(existing?.color ?: -1) }
     var unified by rememberSaveable { mutableStateOf(existing?.unified ?: true) }
+    // Other addresses this account sends from; saved with the rest when you tap Save.
+    var identities by remember { mutableStateOf(existing?.identities.orEmpty()) }
+    var editingIdentity by remember { mutableStateOf<Identity?>(null) }
     val pgpKeys by c.pgpKeys.keys.collectAsStateWithLifecycle()
     LaunchedEffect(editing) { if (editing) c.pgpKeys.load() }
     // A key made or picked on the key screens meanwhile shows here (and isn't undone by saving).
@@ -196,6 +203,7 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
             autocrypt = autocrypt,
             color = color,
             unified = unified,
+            identities = identities,
         )
     }
 
@@ -355,6 +363,22 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
                     colors = ctrlFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Group(stringResource(R.string.identities_title), padded = false, footer = stringResource(R.string.identities_footer)) {
+                    identities.forEach { idn ->
+                        GroupRow(
+                            idn.email,
+                            idn.name.ifBlank { null },
+                            icon = Icons.Outlined.AlternateEmail,
+                            onClick = { editingIdentity = idn },
+                            trailing = {
+                                IconButton(onClick = { identities = identities - idn }) {
+                                    Icon(Icons.Outlined.Close, stringResource(R.string.remove), tint = CtrlColors.Muted)
+                                }
+                            },
+                        )
+                    }
+                    GroupRow(stringResource(R.string.identity_add), icon = Icons.Outlined.Add, showChevron = true, onClick = { editingIdentity = Identity("") })
+                }
                 // How the account looks in lists, and whether it's in "All inboxes".
                 Group(stringResource(R.string.setup_in_lists), padded = false) {
                     AccountColorRow(color, autoColor = accountColor(existing!!.copy(color = -1))) { color = it }
@@ -461,6 +485,18 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
         )
     }
 
+    editingIdentity?.let { current ->
+        IdentityDialog(
+            current,
+            // The account's own address and its other identities can't be added twice.
+            taken = listOf(email.trim()) + identities.filter { it !== current }.map { it.email },
+            onDismiss = { editingIdentity = null },
+        ) { saved ->
+            identities = if (identities.any { it === current }) identities.map { if (it === current) saved else it } else identities + saved
+            editingIdentity = null
+        }
+    }
+
     speed?.let { r -> SpeedDialog(r) { speed = null } }
     speedError?.let { msg ->
         CtrlAlertDialog(
@@ -493,6 +529,48 @@ fun AccountSetupScreen(accountId: String?, first: Boolean) {
             }
         }
     }
+}
+
+/** Adds or changes one identity: the address, and optionally its own name and signature. */
+@Composable
+private fun IdentityDialog(initial: Identity, taken: List<String>, onDismiss: () -> Unit, onSave: (Identity) -> Unit) {
+    var address by remember { mutableStateOf(initial.email) }
+    var name by remember { mutableStateOf(initial.name) }
+    var signature by remember { mutableStateOf(initial.signature) }
+    val clean = address.trim()
+    val problem: Int? = when {
+        clean.isEmpty() -> null
+        !android.util.Patterns.EMAIL_ADDRESS.matcher(clean).matches() || clean.hasControlChars() || name.hasControlChars() -> R.string.identity_bad
+        taken.any { it.equals(clean, ignoreCase = true) } -> R.string.identity_taken
+        else -> null
+    }
+    CtrlAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(if (initial.email.isEmpty()) R.string.identity_add else R.string.identity_edit)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Field(stringResource(R.string.identity_email), address, { address = it }, KeyboardType.Email)
+                Field(stringResource(R.string.identity_name), name, { name = it })
+                OutlinedTextField(
+                    value = signature,
+                    onValueChange = { signature = it },
+                    label = { Text(stringResource(R.string.identity_signature)) },
+                    minLines = 2,
+                    shape = CtrlFieldShape,
+                    colors = ctrlFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (problem != null) Text(stringResource(problem), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Error)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(Identity(clean, name.trim(), signature.trimEnd())) },
+                enabled = clean.isNotEmpty() && problem == null,
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /** What the speed test measured, and what it suggests. */

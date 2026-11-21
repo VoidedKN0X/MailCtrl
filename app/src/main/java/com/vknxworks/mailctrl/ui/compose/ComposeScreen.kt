@@ -51,6 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -62,6 +65,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.data.drafts.Draft
+import com.vknxworks.mailctrl.data.local.MailedAddress
+import com.vknxworks.mailctrl.data.local.RecipientSuggestions
+import com.vknxworks.mailctrl.ui.components.runTask
 import com.vknxworks.mailctrl.mail.Address
 import com.vknxworks.mailctrl.mail.Attachment
 import com.vknxworks.mailctrl.mail.MessageBody
@@ -126,6 +132,8 @@ private data class Start(
     val sign: Boolean = false,
     /** It quotes or forwards an encrypted message. */
     val quotesEncrypted: Boolean = false,
+    /** The address it's written from, when that's one of the account's identities (null: the account's own). */
+    val from: String? = null,
 )
 
 @Composable
@@ -168,7 +176,9 @@ fun ComposeScreen(route: ComposeRoute) {
 private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAccount: String): Start {
     val c = context.container
     val account = c.accounts.get(route.accountId ?: fallbackAccount) ?: c.accounts.get(fallbackAccount)!!
-    val signature = account.signature.takeIf { it.isNotBlank() }?.let { "\n\n-- \n$it" }.orEmpty()
+    /** The signature of the address written from: an identity's own, or the account's. */
+    fun signatureOf(from: String?) = signatureBlock(account.sender(from).signature)
+    val signature = signatureOf(null)
     when (route.mode) {
         ComposeMode.DRAFT -> {
             val d = route.draftId?.let { c.drafts.get(it) } ?: return Start(account.id, body = signature)
@@ -185,6 +195,7 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 replyUid = d.replyUid,
                 encrypt = d.encrypt,
                 sign = d.sign,
+                from = d.from,
             )
         }
         ComposeMode.REPLY, ComposeMode.REPLY_ALL, ComposeMode.FORWARD -> {
@@ -196,6 +207,9 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
             // An encrypted message is answered (and forwarded) encrypted, when the account has a key.
             val wasEncrypted = original.decrypted || original.pgp is PgpPayload.Encrypted || original.pgp is PgpPayload.InlineEncrypted
             val secure = wasEncrypted && account.pgpKey != null
+            // Written to one of your identities: answered (and forwarded) from that address, with its signature.
+            val from = (h.to + original.cc).firstOrNull { account.isOwn(it.email) }?.email?.takeIf { !it.equals(account.email, ignoreCase = true) }
+            val signature = signatureOf(from)
             if (route.mode == ComposeMode.FORWARD) {
                 val head = buildString {
                     append("\n\n---------- ").append(str(R.string.forwarded_message)).append(" ----------\n")
@@ -216,14 +230,14 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                     encrypt = secure,
                     sign = secure,
                     quotesEncrypted = wasEncrypted,
+                    from = from,
                 )
             }
-            val me = account.email.lowercase()
             val replyTo = original.replyTo.ifEmpty { listOfNotNull(h.from) }
             // Answering your own sent message goes to its recipients again.
-            val to = if (h.from?.email.equals(account.email, ignoreCase = true)) h.to else replyTo
+            val to = if (account.isOwn(h.from?.email)) h.to else replyTo
             val cc = if (route.mode == ComposeMode.REPLY_ALL) {
-                (h.to + original.cc).filter { a -> a.email.lowercase() != me && to.none { it.email.equals(a.email, ignoreCase = true) } }
+                (h.to + original.cc).filter { a -> !account.isOwn(a.email) && to.none { it.email.equals(a.email, ignoreCase = true) } }
                     .distinctBy { it.email.lowercase() }
             } else {
                 emptyList()
@@ -243,6 +257,7 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 encrypt = secure,
                 sign = secure,
                 quotesEncrypted = wasEncrypted,
+                from = from,
             )
         }
         else -> {
@@ -258,6 +273,24 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 files = request?.attachments.orEmpty(),
             )
         }
+    }
+}
+
+/** A signature as it sits in a message: after the usual "-- " line. Empty when there's no signature. */
+private fun signatureBlock(signature: String): String = signature.takeIf { it.isNotBlank() }?.let { "\n\n-- \n$it" }.orEmpty()
+
+/**
+ * [body] with the signature of the address written from before ([old]) replaced by the new one's ([new]). A
+ * signature you changed yourself is left alone.
+ */
+private fun swapSignature(body: String, old: String, new: String): String {
+    val oldBlock = signatureBlock(old)
+    val newBlock = signatureBlock(new)
+    if (oldBlock == newBlock) return body
+    return when {
+        oldBlock.isNotEmpty() && body.contains(oldBlock) -> body.replaceFirst(oldBlock, newBlock)
+        oldBlock.isEmpty() && body.isBlank() -> newBlock
+        else -> body
     }
 }
 
@@ -302,6 +335,8 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
     val nav = LocalNavigator.current
     val accounts by c.accounts.accounts.collectAsStateWithLifecycle()
     var accountId by rememberSaveable { mutableStateOf(start.accountId) }
+    // One of the account's identities, or null for its own address.
+    var fromEmail by rememberSaveable { mutableStateOf(start.from) }
     var to by rememberSaveable { mutableStateOf(start.to) }
     var cc by rememberSaveable { mutableStateOf(start.cc) }
     var bcc by rememberSaveable { mutableStateOf(start.bcc) }
@@ -319,6 +354,10 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
     // OpenPGP: encrypt and sign switches, per message. Encrypting needs a key for every recipient, and the
     // account's own key (everything is encrypted to you too).
     val settings by c.settings.settings.collectAsStateWithLifecycle()
+    // Addresses you've mailed before, suggested while you type (never the phone's contacts).
+    val mailed by c.mailed.known.collectAsStateWithLifecycle()
+    val known = if (settings.suggestRecipients) mailed else emptyList()
+    val forget: (String) -> Unit = { email -> c.runTask { c.mailed.forget(email) } }
     val pgpKeys by c.pgpKeys.keys.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { c.pgpKeys.load() }
     val ownKey = account?.pgpKey?.let { fp -> pgpKeys.firstOrNull { it.info.fingerprint == fp && it.info.secret } }
@@ -358,6 +397,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         replyUid = start.replyUid,
         encrypt = encrypt,
         sign = sign,
+        from = account?.sender(fromEmail)?.email?.takeIf { !it.equals(account?.email, ignoreCase = true) },
     )
 
     // Unsent text is kept as a draft: when you leave, and before the app lock closes the screen.
@@ -464,7 +504,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Gutter, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (accounts.size > 1 && account != null) {
+            if (account != null && (accounts.size > 1 || account.identities.isNotEmpty())) {
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -477,16 +517,16 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(stringResource(R.string.field_from).uppercase(), style = CtrlType.Label, color = CtrlColors.Muted, modifier = Modifier.width(56.dp))
-                    Text(account.email, style = MaterialTheme.typography.bodyLarge, color = CtrlColors.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(account.sender(fromEmail).email, style = MaterialTheme.typography.bodyLarge, color = CtrlColors.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Icon(Icons.Outlined.ExpandMore, null, tint = CtrlColors.Muted)
                 }
             }
-            AddressField(stringResource(R.string.field_to), to, { to = it }) {
+            AddressField(stringResource(R.string.field_to), to, { to = it }, known, forget) {
                 if (!showCc) IconButton(onClick = { showCc = true }) { Text(stringResource(R.string.cc_bcc), style = CtrlType.Status, color = CtrlColors.AccentText) }
             }
             if (showCc) {
-                AddressField(stringResource(R.string.field_cc), cc, { cc = it })
-                AddressField(stringResource(R.string.field_bcc), bcc, { bcc = it })
+                AddressField(stringResource(R.string.field_cc), cc, { cc = it }, known, forget)
+                AddressField(stringResource(R.string.field_bcc), bcc, { bcc = it }, known, forget)
             }
             OutlinedTextField(
                 value = subject,
@@ -516,6 +556,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
                     canLookUp = settings.wkdLookup,
                     quotesEncrypted = start.quotesEncrypted,
                     onLookUp = { wkdQueue = missing },
+                    subjectEncrypted = settings.encryptSubject,
                 )
             } else if (start.quotesEncrypted) {
                 PgpNotes(hasKey = false, encrypt = false, recipients = 0, missing = emptyList(), canLookUp = false, quotesEncrypted = true, onLookUp = {})
@@ -543,14 +584,22 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
     }
 
     if (picking) {
+        // Every account's own address, then its identities.
+        val choices = accounts.flatMap { a -> a.senders.map { (a.id to it.email) to it.email } }
         ChoiceSheet(
             stringResource(R.string.field_from),
-            accounts.map { it.id to it.email },
-            accountId,
+            choices,
+            account?.let { it.id to it.sender(fromEmail).email },
             onDismiss = { picking = false },
-        ) { id ->
+        ) { (id, email) ->
             picking = false
+            val next = accounts.firstOrNull { it.id == id }
+            // The signature follows the address you write from.
+            val before = account?.sender(fromEmail)?.signature.orEmpty()
+            val after = next?.sender(email)?.signature.orEmpty()
+            body = swapSignature(body, before, after)
             accountId = id
+            fromEmail = email.takeIf { next != null && !it.equals(next.email, ignoreCase = true) }
         }
     }
 
@@ -579,20 +628,74 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
     }
 }
 
+/**
+ * A recipients field. While you type, up to four addresses you have mailed before ([known]) are offered under it;
+ * tapping one fills it in, and the cross forgets it ([onForget]).
+ */
 @Composable
-private fun AddressField(label: String, value: String, onChange: (String) -> Unit, trailing: (@Composable () -> Unit)? = null) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        singleLine = false,
-        maxLines = 4,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-        trailingIcon = trailing,
-        shape = CtrlFieldShape,
-        colors = ctrlFieldColors(),
-        modifier = Modifier.fillMaxWidth(),
-    )
+private fun AddressField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    known: List<MailedAddress>,
+    onForget: (String) -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    // The field keeps its own cursor, so a suggestion can put it at the end, ready for the next address.
+    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    if (field.text != value) field = TextFieldValue(value, TextRange(value.length))
+    var focused by remember { mutableStateOf(false) }
+    val suggestions = remember(value, known, focused) { if (focused) RecipientSuggestions.suggest(known, value) else emptyList() }
+    Column {
+        OutlinedTextField(
+            value = field,
+            onValueChange = {
+                field = it
+                if (it.text != value) onChange(it.text)
+            },
+            label = { Text(label) },
+            singleLine = false,
+            maxLines = 4,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            trailingIcon = trailing,
+            shape = CtrlFieldShape,
+            colors = ctrlFieldColors(),
+            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+        )
+        if (suggestions.isNotEmpty()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .clip(CtrlCardShape)
+                    .background(CtrlColors.Surface)
+                    .border(1.dp, CtrlColors.Outline, CtrlCardShape),
+            ) {
+                suggestions.forEach { a ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val next = RecipientSuggestions.complete(value, a)
+                                field = TextFieldValue(next, TextRange(next.length))
+                                onChange(next)
+                            }
+                            .heightIn(min = 48.dp)
+                            .padding(start = 14.dp, end = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            if (a.name.isNotBlank()) Text(a.name, style = MaterialTheme.typography.bodyMedium, color = CtrlColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(a.email, style = CtrlType.Meta, color = CtrlColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        IconButton(onClick = { onForget(a.email) }) {
+                            Icon(Icons.Outlined.Close, stringResource(R.string.suggestion_forget), Modifier.size(18.dp), tint = CtrlColors.Muted)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -626,6 +729,8 @@ private fun PgpNotes(
     canLookUp: Boolean,
     quotesEncrypted: Boolean,
     onLookUp: () -> Unit,
+    /** Settings › OpenPGP › "Encrypt the subject too" is on. */
+    subjectEncrypted: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         when {
@@ -645,7 +750,13 @@ private fun PgpNotes(
                 color = CtrlColors.Muted,
             )
         }
-        if (encrypt) Text(stringResource(R.string.pgp_compose_subject), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Muted)
+        if (encrypt) {
+            Text(
+                stringResource(if (subjectEncrypted) R.string.pgp_compose_subject_encrypted else R.string.pgp_compose_subject),
+                style = MaterialTheme.typography.bodySmall,
+                color = CtrlColors.Muted,
+            )
+        }
         if (quotesEncrypted && !encrypt) {
             Text(stringResource(R.string.pgp_compose_quotes_encrypted), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Error)
         }

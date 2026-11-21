@@ -26,6 +26,17 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.HowToReg
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.pluralStringResource
+import com.vknxworks.mailctrl.ui.components.ConfirmDialog
+import com.vknxworks.mailctrl.ui.components.CtrlAlertDialog
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DownloadForOffline
@@ -45,6 +56,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.Settings as SettingsIcon
+import androidx.compose.material.icons.automirrored.outlined.Subject
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -241,6 +253,10 @@ fun SettingsScreen() {
     val accounts by c.accounts.accounts.collectAsStateWithLifecycle()
     fun update(t: (AppSettings) -> AppSettings) { scope.launch { c.settings.update(t) } }
     val bioAvailable = remember { AppLock.biometricAvailable(context) }
+    val pictureSenders by c.pictureSenders.senders.collectAsStateWithLifecycle()
+    val mailed by c.mailed.known.collectAsStateWithLifecycle()
+    var showPictureSenders by remember { mutableStateOf(false) }
+    var forgettingMailed by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(stringResource(R.string.settings))
@@ -252,6 +268,19 @@ fun SettingsScreen() {
                     s.remoteContent,
                     icon = Icons.Outlined.Image,
                 ) { v -> update { it.copy(remoteContent = v) } }
+                GroupRow(
+                    stringResource(R.string.picture_senders),
+                    pluralStringResource(R.plurals.picture_senders_n, pictureSenders.size, pictureSenders.size),
+                    icon = Icons.Outlined.HowToReg,
+                    showChevron = true,
+                    onClick = { showPictureSenders = true },
+                )
+                GroupSwitch(
+                    stringResource(R.string.dark_messages),
+                    stringResource(R.string.dark_messages_subtitle),
+                    s.darkMessages,
+                    icon = Icons.Outlined.Contrast,
+                ) { v -> update { it.copy(darkMessages = v) } }
                 GroupSwitch(
                     stringResource(R.string.mark_read_on_open),
                     stringResource(R.string.mark_read_on_open_subtitle),
@@ -280,6 +309,21 @@ fun SettingsScreen() {
                 }
             }
 
+            Group(stringResource(R.string.group_writing)) {
+                GroupSwitch(
+                    stringResource(R.string.suggest_recipients),
+                    stringResource(R.string.suggest_recipients_subtitle),
+                    s.suggestRecipients,
+                    icon = Icons.Outlined.PersonSearch,
+                ) { v -> update { it.copy(suggestRecipients = v) } }
+                GroupRow(
+                    stringResource(R.string.mailed_forget),
+                    pluralStringResource(R.plurals.mailed_n, mailed.size, mailed.size),
+                    icon = Icons.Outlined.PersonRemove,
+                    onClick = if (mailed.isEmpty()) null else ({ forgettingMailed = true }),
+                )
+            }
+
             Group(stringResource(R.string.group_pgp), footer = stringResource(R.string.pgp_settings_footer)) {
                 GroupRow(
                     stringResource(R.string.pgp_keys),
@@ -298,6 +342,12 @@ fun SettingsScreen() {
                     c.pgp.forget()
                     update { it.copy(pgpPassphrase = v) }
                 }
+                GroupSwitch(
+                    stringResource(R.string.pgp_encrypt_subject),
+                    stringResource(R.string.pgp_encrypt_subject_subtitle),
+                    s.encryptSubject,
+                    icon = Icons.AutoMirrored.Outlined.Subject,
+                ) { v -> update { it.copy(encryptSubject = v) } }
                 GroupSwitch(
                     stringResource(R.string.pgp_wkd),
                     stringResource(R.string.pgp_wkd_subtitle),
@@ -403,6 +453,40 @@ fun SettingsScreen() {
                     icon = Icons.Outlined.Notifications,
                 ) { v -> update { it.copy(notificationContent = v) } }
             }
+        }
+    }
+
+    if (showPictureSenders) {
+        CtrlAlertDialog(
+            onDismissRequest = { showPictureSenders = false },
+            title = { Text(stringResource(R.string.picture_senders)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (pictureSenders.isEmpty()) {
+                        Text(stringResource(R.string.picture_senders_none), style = MaterialTheme.typography.bodyMedium, color = CtrlColors.Muted)
+                    }
+                    pictureSenders.forEach { sender ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(sender, style = MaterialTheme.typography.bodyMedium, color = CtrlColors.Text, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { scope.launch { c.pictureSenders.set(sender, false) } }) {
+                                Icon(Icons.Outlined.Close, stringResource(R.string.remove), tint = CtrlColors.Muted)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showPictureSenders = false }) { Text(stringResource(R.string.close)) } },
+        )
+    }
+    if (forgettingMailed) {
+        ConfirmDialog(
+            stringResource(R.string.mailed_forget_title),
+            stringResource(R.string.mailed_forget_body),
+            stringResource(R.string.mailed_forget_confirm),
+            onDismiss = { forgettingMailed = false },
+        ) {
+            forgettingMailed = false
+            scope.launch { c.mailed.clear() }
         }
     }
 }

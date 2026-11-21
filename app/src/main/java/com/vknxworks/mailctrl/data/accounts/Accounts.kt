@@ -17,6 +17,19 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.util.UUID
 
+/**
+ * Another address (and name) you can send from with the same account: an alias, or a "send mail as" address
+ * your provider allows for this mailbox. Mail still goes out through the account's own server and sign-in.
+ */
+@Serializable
+data class Identity(
+    val email: String,
+    /** The name people see; empty for the account's own sender name. */
+    val name: String = "",
+    /** Its own signature; empty for the account's signature. */
+    val signature: String = "",
+)
+
 /** One mail account: who you are, where your mail lives, and how to sign in. */
 @Serializable
 data class Account(
@@ -58,8 +71,24 @@ data class Account(
     val color: Int = -1,
     /** Shown in "All inboxes". */
     val unified: Boolean = true,
+    /** Other addresses you send from with this account (aliases). */
+    val identities: List<Identity> = emptyList(),
 ) {
     val title: String get() = label.trim().ifEmpty { email }
+
+    /** Every address this account can send from: its own first, then its identities. */
+    val senders: List<Identity>
+        get() = listOf(Identity(email, senderName, signature)) + identities.filterNot { it.email.equals(email, ignoreCase = true) }
+
+    /** The identity for [address], or the account's own when it's empty or unknown. */
+    fun sender(address: String?): Identity {
+        val all = senders
+        val found = address?.trim()?.takeIf { it.isNotEmpty() }?.let { a -> all.firstOrNull { it.email.equals(a, ignoreCase = true) } } ?: all.first()
+        return Identity(found.email, found.name.ifBlank { senderName }, found.signature.ifBlank { signature })
+    }
+
+    /** Whether [address] is one of this account's own addresses. */
+    fun isOwn(address: String?): Boolean = address != null && senders.any { it.email.equals(address.trim(), ignoreCase = true) }
 
     /** Mail travels unencrypted to and from at least one of the servers. */
     val unencrypted: Boolean get() = imap.security == Security.NONE || smtp.security == Security.NONE

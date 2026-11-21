@@ -150,6 +150,10 @@ data class OutgoingMessage(
     val pgp: com.vknxworks.mailctrl.pgp.PgpOutgoing? = null,
     /** "Autocrypt" header value with your public key, when the account sends it. */
     val autocrypt: String? = null,
+    /** The address to send from when it isn't the account's own (one of its identities). */
+    val from: String? = null,
+    /** With encryption: the real subject travels inside the encrypted part, and the outside says "...". */
+    val protectSubject: Boolean = false,
 )
 
 data class OutgoingAttachment(val name: String, val mimeType: String, val bytes: ByteArray)

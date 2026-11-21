@@ -33,7 +33,9 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.HideImage
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.MarkEmailUnread
@@ -115,6 +117,7 @@ import com.vknxworks.mailctrl.ui.nav.MessageRoute
 import com.vknxworks.mailctrl.ui.theme.CtrlColors
 import com.vknxworks.mailctrl.ui.theme.CtrlType
 import com.vknxworks.mailctrl.ui.theme.Gutter
+import com.vknxworks.mailctrl.ui.theme.LocalCtrlColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -143,6 +146,9 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
     var moving by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
+    // Pictures of this sender always load ("Always from this sender"), and this message in its own colours.
+    val pictureSenders by c.pictureSenders.senders.collectAsStateWithLifecycle()
+    var originalColours by remember { mutableStateOf(false) }
     // OpenPGP: what decrypting and checking found, a key in the message to import, and the dialogs for them.
     var pgpView by remember { mutableStateOf<PgpView?>(null) }
     var pgpBusy by remember { mutableStateOf(false) }
@@ -165,7 +171,9 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
             c.lastOpened = body
             if (body.header.seen) c.cache.setFlags(accountId, folder, listOf(uid), seen = true)
             c.notifier.cancel(body.header)
-            remote = saved.remoteContent == RemoteContent.ALWAYS
+            // Pictures load by themselves only when you chose that: for all mail, or for this sender.
+            remote = saved.remoteContent == RemoteContent.ALWAYS ||
+                (body.hasRemoteContent && c.pictureSenders.allowed(body.header.from?.email))
             Loaded.Ready(body)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -176,6 +184,7 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
 
     val body = (state as? Loaded.Ready)?.body
     val h = body?.header
+    val dark = LocalCtrlColors.current.isDark
     val canArchive = c.actions.canArchive(accountId, folder)
 
     // Decrypts and checks signatures once the message is there, and again after a key was unlocked or imported.
@@ -238,9 +247,16 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
                 MessageContent(
                     shown,
                     remote = remote,
+                    dark = settings.darkMessages && !originalColours && dark,
                     showDetails = details,
                     onToggleDetails = { details = !details },
                     onLoadRemote = { remote = true },
+                    onAlwaysRemote = s.body.header.from?.email?.takeIf { it.isNotBlank() }?.let { email ->
+                        {
+                            remote = true
+                            c.runTask { c.pictureSenders.set(email, true) }
+                        }
+                    },
                     onLink = { url -> linkToOpen = url },
                     onReply = { mode -> nav.compose(ComposeRoute(mode = mode, accountId = accountId, folder = folder, uid = uid)) },
                     onKeys = { rings ->
@@ -296,6 +312,17 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
             }
             body.unsubscribe?.let { link ->
                 add(SheetAction(stringResource(R.string.unsubscribe), Icons.Outlined.Unsubscribe) { linkToOpen = link })
+            }
+            val sender = h.from?.email?.trim()?.lowercase()
+            if (sender != null && sender in pictureSenders) {
+                add(SheetAction(stringResource(R.string.remote_sender_stop), Icons.Outlined.HideImage) {
+                    c.runTask { c.pictureSenders.set(sender, false) }
+                })
+            }
+            if (body.html != null && settings.darkMessages && dark) {
+                add(SheetAction(stringResource(if (originalColours) R.string.dark_message_on else R.string.dark_message_off), Icons.Outlined.Contrast) {
+                    originalColours = !originalColours
+                })
             }
         }
         ActionSheet(h.subject.ifBlank { stringResource(R.string.no_subject) }, h.from?.display, actions, onDismiss = { more = false })
@@ -394,9 +421,13 @@ private fun MessagePreview(h: MessageHeader) {
 private fun MessageContent(
     body: MessageBody,
     remote: Boolean,
+    /** Show an HTML message dark. */
+    dark: Boolean,
     showDetails: Boolean,
     onToggleDetails: () -> Unit,
     onLoadRemote: () -> Unit,
+    /** "Always from this sender", when the sender has an address. */
+    onAlwaysRemote: (() -> Unit)?,
     onLink: (String) -> Unit,
     onReply: (String) -> Unit,
     onKeys: (List<PGPKeyRing>) -> Unit,
@@ -447,7 +478,7 @@ private fun MessageContent(
         pgp()
 
         if (body.hasRemoteContent && !remote) {
-            Row(
+            Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Gutter, vertical = 4.dp)
@@ -455,19 +486,26 @@ private fun MessageContent(
                     .background(CtrlColors.Surface)
                     .border(1.dp, CtrlColors.Outline, CtrlCardShape)
                     .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Outlined.Image, null, Modifier.size(20.dp), tint = CtrlColors.Muted)
-                Spacer(Modifier.width(12.dp))
-                Text(stringResource(R.string.remote_blocked), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Muted, modifier = Modifier.weight(1f))
-                TextButton(onClick = onLoadRemote) { Text(stringResource(R.string.remote_load)) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Image, null, Modifier.size(20.dp), tint = CtrlColors.Muted)
+                    Spacer(Modifier.width(12.dp))
+                    Text(stringResource(R.string.remote_blocked), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Muted, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onLoadRemote) { Text(stringResource(R.string.remote_load)) }
+                }
+                if (onAlwaysRemote != null) {
+                    // Opt-in, per sender: nothing loads by itself until you tap this for someone.
+                    TextButton(onClick = onAlwaysRemote, modifier = Modifier.align(Alignment.End)) {
+                        Text(stringResource(R.string.remote_sender_always))
+                    }
+                }
             }
             Spacer(Modifier.height(8.dp))
         }
 
         val html = body.html
         if (html != null) {
-            val page = remember(html, remote, body.inlineImages) { prepareHtml(html, body.inlineImages, remote) }
+            val page = remember(html, remote, body.inlineImages, dark) { prepareHtml(html, body.inlineImages, remote, dark) }
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -475,7 +513,7 @@ private fun MessageContent(
                     .clip(CtrlCardShape)
                     .border(1.dp, CtrlColors.Outline, CtrlCardShape),
             ) {
-                HtmlView(page, remote, onLink, Modifier.fillMaxWidth().heightIn(min = 80.dp))
+                HtmlView(page, remote, onLink, Modifier.fillMaxWidth().heightIn(min = 80.dp), dark = dark)
             }
         } else {
             val text = body.text.orEmpty()

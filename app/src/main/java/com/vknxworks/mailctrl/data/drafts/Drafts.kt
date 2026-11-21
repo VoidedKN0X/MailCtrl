@@ -33,6 +33,8 @@ data class Draft(
     val encrypt: Boolean = false,
     /** Sign it with your OpenPGP key. */
     val sign: Boolean = false,
+    /** The address it's sent from, when it isn't the account's own (one of its identities). */
+    val from: String? = null,
     val updated: Long = System.currentTimeMillis(),
 ) {
     val isEmpty: Boolean get() = to.isEmpty() && cc.isEmpty() && bcc.isEmpty() && subject.isBlank() && body.isBlank()

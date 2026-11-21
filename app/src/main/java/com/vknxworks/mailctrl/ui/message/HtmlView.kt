@@ -32,9 +32,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - pictures inside the message (cid:) become the data that was downloaded with it;
  * - a Content-Security-Policy allows no scripts, frames, forms or plugins at all, and nothing from the internet
  *   unless [remote] (pictures, styles and fonts only, even then);
- * - a light page style keeps text readable and pictures within the screen.
+ * - a light page style keeps text readable and pictures within the screen;
+ * - with [dark], the whole message is shown with its colours turned around (light text on a dark page) and its
+ *   pictures turned back, so they look as they were. Done with a style only: still no scripts.
  */
-fun prepareHtml(html: String, inlineImages: Map<String, String>, remote: Boolean): String {
+fun prepareHtml(html: String, inlineImages: Map<String, String>, remote: Boolean, dark: Boolean = false): String {
     // A <meta http-equiv="refresh"> would make the page try to go somewhere by itself: it's removed.
     val withInline = CID.replace(META_REFRESH.replace(html, "")) { m ->
         val id = m.groupValues[1].trim()
@@ -59,8 +61,22 @@ fun prepareHtml(html: String, inlineImages: Map<String, String>, remote: Boolean
           a { color: #5b2fc9; }
         </style>
     """.trimIndent()
-    return head + "\n" + withInline
+    return head + (if (dark) "\n" + DARK_STYLE else "") + "\n" + withInline
 }
+
+/**
+ * Dark messages: the message's own box (body) is drawn with every colour inverted and the hue turned back, so
+ * white becomes black, dark text becomes light and colours keep their tint; pictures and videos get the same
+ * filter once more, which puts them back as they were. The page behind it is black.
+ */
+private val DARK_STYLE = """
+    <style>
+      html { background: #000000 !important; }
+      body { background-color: #ffffff; filter: invert(1) hue-rotate(180deg); }
+      img, video, picture, svg, object, embed { filter: invert(1) hue-rotate(180deg); }
+      picture img { filter: none; }
+    </style>
+""".trimIndent()
 
 /** cid: links to pictures sent inside the message. */
 private val CID = Regex("""(?i)cid:([^"'\s>)]+)""")
@@ -74,7 +90,7 @@ private val META_REFRESH = Regex("""(?is)<meta[^>]*http-equiv\s*=\s*["']?\s*refr
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun HtmlView(html: String, remote: Boolean, onLink: (String) -> Unit, modifier: Modifier = Modifier) {
+fun HtmlView(html: String, remote: Boolean, onLink: (String) -> Unit, modifier: Modifier = Modifier, dark: Boolean = false) {
     val link = rememberUpdatedState(onLink)
     // What the WebView shows now, so it only loads again when the page or the internet setting changes.
     val loaded = remember { arrayOfNulls<Pair<String, Boolean>>(1) }
@@ -154,6 +170,8 @@ fun HtmlView(html: String, remote: Boolean, onLink: (String) -> Unit, modifier: 
                 allowNetwork.set(remote)
                 view.settings.blockNetworkImage = !remote
                 view.settings.blockNetworkLoads = !remote
+                // What shows before the page is drawn, and around it: no white flash in dark mode.
+                view.setBackgroundColor(if (dark) Color.BLACK else Color.WHITE)
                 view.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
             }
         },
