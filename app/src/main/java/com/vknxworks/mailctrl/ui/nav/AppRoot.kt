@@ -64,6 +64,7 @@ import com.vknxworks.mailctrl.ui.components.CtrlBottomBar
 import com.vknxworks.mailctrl.ui.components.CtrlNavItem
 import com.vknxworks.mailctrl.ui.components.LocalBottomClearance
 import com.vknxworks.mailctrl.ui.folders.FoldersScreen
+import com.vknxworks.mailctrl.ui.inbox.ConversationScreen
 import com.vknxworks.mailctrl.ui.inbox.FolderScreen
 import com.vknxworks.mailctrl.ui.inbox.InboxScreen
 import com.vknxworks.mailctrl.ui.message.MessageScreen
@@ -214,6 +215,10 @@ private fun AppNavHost(navController: NavHostController) {
         composable<FolderRoute> {
             val r = it.toRoute<FolderRoute>()
             FolderScreen(r.accountId, r.folder)
+        }
+        composable<ConversationRoute> {
+            val r = it.toRoute<ConversationRoute>()
+            ConversationScreen(r.accountId, r.folder, r.uid)
         }
         composable<MessageRoute> {
             val r = it.toRoute<MessageRoute>()

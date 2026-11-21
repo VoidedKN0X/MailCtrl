@@ -662,6 +662,8 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         add(FetchProfile.Item.FLAGS)
         add(FetchProfile.Item.CONTENT_INFO)
         add(UIDFolder.FetchProfileItem.UID)
+        // Which messages it answers, for conversations (In-Reply-To and Message-ID come with the envelope).
+        add("References")
     }
 
     /** Opening a message: the list's details, its size, and the two headers MailCtrl uses, in one request. */
@@ -695,8 +697,20 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             answered = m.isSet(Flags.Flag.ANSWERED),
             hasAttachments = runCatching { hasAttachments(m) }.getOrDefault(false),
             size = runCatching { m.size.toLong() }.getOrDefault(-1L),
+            messageId = runCatching { (m as? MimeMessage)?.messageID }.getOrNull()?.let { Threads.ids(it, 1).firstOrNull() },
+            refs = runCatching { threadRefs(m) }.getOrDefault(emptyList()),
         )
     }.getOrNull()
+
+    /**
+     * The Message-IDs [m] answers. Only what the list request already brought: "References" (asked for with it)
+     * and "In-Reply-To" (part of the envelope), so this never costs a request per message.
+     */
+    private fun threadRefs(m: Message): List<String> {
+        val references = m.getHeader("References")?.joinToString(" ")
+        val inReplyTo = (m as? IMAPMessage)?.inReplyTo
+        return (Threads.ids(references) + Threads.ids(inReplyTo, 3)).distinct().takeLast(20)
+    }
 
     private fun flagState(m: Message) = FlagState(
         seen = m.isSet(Flags.Flag.SEEN),

@@ -74,6 +74,7 @@ import com.vknxworks.mailctrl.ui.components.friendlyMessage
 import com.vknxworks.mailctrl.ui.components.rememberNotificationAccess
 import com.vknxworks.mailctrl.ui.components.runTask
 import com.vknxworks.mailctrl.ui.nav.AccountSetupRoute
+import com.vknxworks.mailctrl.ui.nav.ConversationRoute
 import com.vknxworks.mailctrl.ui.nav.LocalNavigator
 import com.vknxworks.mailctrl.ui.theme.CtrlColors
 import com.vknxworks.mailctrl.ui.theme.Gutter
@@ -282,6 +283,7 @@ fun InboxScreen() {
                 selection = selection,
                 onOpen = { nav.message(it.accountId, it.folder, it.uid) },
                 state = listState,
+                onOpenThread = { nav.navigate(ConversationRoute(it.accountId, it.folder, it.uid)) },
             ) {
                 MessageView(
                     Icons.Outlined.Inbox,
@@ -461,6 +463,7 @@ fun FolderScreen(accountId: String, folder: String) {
             selection = selection,
             onOpen = { h -> nav.message(h.accountId, h.folder, h.uid) },
             showRecipients = role == FolderRole.SENT || role == FolderRole.DRAFTS,
+            onOpenThread = { h -> nav.navigate(ConversationRoute(h.accountId, h.folder, h.uid)) },
         ) {
             MessageView(Icons.Outlined.Inbox, stringResource(R.string.folder_empty), null)
         }

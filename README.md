@@ -17,6 +17,7 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 - **All inboxes**: every account's inbox together, newest first, each message tagged with its account's name and colour; or one account at a time. Each account chooses whether it's in it
 - **OpenPGP encryption built in**: read and send encrypted and signed mail (PGP/MIME), make or import your own keys, import your contacts' keys from files, attachments or Autocrypt, no other app needed (see [Encrypted mail (OpenPGP)](#encrypted-mail-openpgp))
 - **All your folders**, with unread counts; Sent, Drafts, Archive, Junk and Trash are found by themselves
+- **Conversations**: a message and its answers show as one row; tap it to see them all
 - **Read mail safely**: HTML messages are shown without scripts, and pictures from the internet stay blocked until you tap **Load**, or **Always from this sender** for senders you pick (see [Reading mail](#reading-mail))
 - **Dark messages**: HTML mail is shown dark while the app is dark
 - **Write, reply, reply all and forward**, with Cc and Bcc, attachments from any app, and the original attachments when forwarding

@@ -65,6 +65,10 @@ data class MessageHeader(
     val hasAttachments: Boolean,
     /** Size on the server in bytes, or -1 when unknown. */
     val size: Long = -1,
+    /** Its Message-ID (without the angle brackets), for putting conversations together; null when unknown. */
+    val messageId: String? = null,
+    /** The Message-IDs it answers ("References" and "In-Reply-To"). */
+    val refs: List<String> = emptyList(),
 ) {
     val key: String get() = "$accountId/$folder/$uid"
 }

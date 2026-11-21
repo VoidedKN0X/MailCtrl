@@ -572,4 +572,13 @@
     <string name="pgp_encrypt_subject">Encrypt the subject too</string>
     <string name="pgp_encrypt_subject_subtitle">In an encrypted message the real subject travels inside the encryption; mail servers and the message list only see \"...\". Thunderbird, K-9 Mail and MailCtrl show the real subject once the message is decrypted.</string>
     <string name="pgp_compose_subject_encrypted">The subject is encrypted too: outside the message it only says \"...\".</string>
+    <!-- Conversations -->
+    <string name="conversation">Conversation</string>
+    <string name="conversation_empty">No messages of this conversation are left here</string>
+    <string name="conversations">Conversations</string>
+    <string name="conversations_subtitle">A message and its answers show as one row, with the number of messages. Tap it to see them all; swiping or selecting it does it to all of them.</string>
+    <plurals name="conversation_n">
+        <item quantity="one">%1$d message</item>
+        <item quantity="other">Conversation of %1$d messages</item>
+    </plurals>
 </resources>

@@ -196,7 +196,12 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
                 val v = c.pgp.read(b, openedKey)
                 pgpView = v
                 // Answering or forwarding quotes the decrypted text.
-                if (v.body.decrypted) c.lastOpened = v.body
+                if (v.body.decrypted) {
+                    c.lastOpened = v.body
+                    // An encrypted subject: the list shows the real one from now on (kept encrypted on the phone).
+                    val real = v.body.header.subject
+                    if (real.isNotBlank() && real != b.header.subject) runCatching { c.cache.revealSubject(accountId, folder, uid, real) }
+                }
             } finally {
                 pgpBusy = false
             }

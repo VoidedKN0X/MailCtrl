@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inbox
@@ -357,6 +358,12 @@ fun SettingsScreen() {
             }
 
             Group(stringResource(R.string.group_lists), footer = stringResource(R.string.swipe_footer)) {
+                GroupSwitch(
+                    stringResource(R.string.conversations),
+                    stringResource(R.string.conversations_subtitle),
+                    s.conversations,
+                    icon = Icons.Outlined.Forum,
+                ) { v -> update { it.copy(conversations = v) } }
                 GroupChoice(
                     stringResource(R.string.swipe_right),
                     SwipeAction.entries.map { it to stringResource(it.label) },

@@ -88,6 +88,9 @@ import com.vknxworks.mailctrl.data.settings.SwipeAction
 import com.vknxworks.mailctrl.mail.FolderInfo
 import com.vknxworks.mailctrl.mail.FolderRole
 import com.vknxworks.mailctrl.mail.MessageHeader
+import com.vknxworks.mailctrl.mail.Threads
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.vknxworks.mailctrl.ui.components.ActionSheet
 import com.vknxworks.mailctrl.ui.components.Avatar
 import com.vknxworks.mailctrl.ui.components.CtrlCardShape
@@ -129,6 +132,11 @@ fun MessageList(
     state: LazyListState = rememberLazyListState(),
     /** In Sent and Drafts the recipients are shown instead of the sender. */
     showRecipients: Boolean = false,
+    /**
+     * Opens a conversation of several messages. When given (and Settings › Message lists › Conversations is on),
+     * a message and its answers show as one row; without it every message has its own row.
+     */
+    onOpenThread: ((MessageHeader) -> Unit)? = null,
     empty: @Composable () -> Unit,
 ) {
     val c = LocalContext.current.container
@@ -146,12 +154,20 @@ fun MessageList(
             if (pending.isEmpty()) headers else pending.toSet().let { gone -> headers.filter { it.key !in gone } }
         }
     }
+    // Conversations: a message and its answers are one row (the newest first in it). Off: one row per message.
+    val threaded = settings.conversations && onOpenThread != null
+    val rows by remember(headers, threaded) {
+        derivedStateOf {
+            if (threaded) Threads.group(shown, { it.accountId }, { it.messageId }, { it.refs }, { it.subject }) else shown.map { listOf(it) }
+        }
+    }
     val keys = remember(headers) { headers.map { it.key }.toSet() }
     LaunchedEffect(keys) { selection.retainAll { it in keys } }
     BackHandler(enabled = selection.isNotEmpty()) { selection.clear() }
-    val chosen by remember(headers) {
+    // A selected row stands for its whole conversation.
+    val chosen by remember(headers, threaded) {
         derivedStateOf {
-            if (selection.isEmpty()) emptyList() else selection.toSet().let { picked -> headers.filter { it.key in picked } }
+            if (selection.isEmpty()) emptyList() else selection.toSet().let { picked -> rows.filter { it[0].key in picked }.flatten() }
         }
     }
 
@@ -194,22 +210,23 @@ fun MessageList(
         )
     }
 
-    fun onSwipe(h: MessageHeader, action: SwipeAction) {
+    /** A swipe on a row does it to every message of that row's conversation ([all]; [h] is how the row shows). */
+    fun onSwipe(h: MessageHeader, all: List<MessageHeader>, action: SwipeAction) {
         when (action) {
             SwipeAction.NONE -> Unit
             SwipeAction.READ -> {
-                if (!h.seen) c.notifier.cancel(h)
-                c.runTask { c.actions.setSeen(listOf(h), !h.seen) }
+                if (!h.seen) c.notifier.cancelKeys(all)
+                c.runTask { c.actions.setSeen(all, !h.seen) }
             }
-            SwipeAction.FLAG -> c.runTask { c.actions.setFlagged(listOf(h), !h.flagged) }
-            SwipeAction.ARCHIVE -> if (c.actions.canArchive(h.accountId, h.folder)) archiveOrDelete(listOf(h), archive = true)
+            SwipeAction.FLAG -> c.runTask { c.actions.setFlagged(all, !h.flagged) }
+            SwipeAction.ARCHIVE -> if (c.actions.canArchive(h.accountId, h.folder)) archiveOrDelete(all, archive = true)
             else android.widget.Toast.makeText(context, context.getString(R.string.no_archive_folder), android.widget.Toast.LENGTH_SHORT).show()
-            SwipeAction.DELETE -> archiveOrDelete(listOf(h), archive = false)
+            SwipeAction.DELETE -> archiveOrDelete(all, archive = false)
         }
     }
 
     // Older messages load by themselves when you scroll near the end.
-    val shownCount by rememberUpdatedState(shown.size)
+    val shownCount by rememberUpdatedState(rows.size)
     val busy by rememberUpdatedState(loadingMore)
     val loadMore by rememberUpdatedState(onLoadMore)
     LaunchedEffect(state, hasMore) {
@@ -224,7 +241,7 @@ fun MessageList(
     Column(modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
-                if (shown.isEmpty() && !refreshing) {
+                if (rows.isEmpty() && !refreshing) {
                     // Scrollable, so pull-to-refresh still works on an empty list.
                     LazyColumn(Modifier.fillMaxSize()) { item { Box(Modifier.fillParentMaxSize()) { empty() } } }
                 } else {
@@ -233,7 +250,19 @@ fun MessageList(
                         state = state,
                         contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp + LocalBottomClearance.current),
                     ) {
-                        itemsIndexed(shown, key = { _, h -> h.key }, contentType = { _, _ -> "message" }) { index, h ->
+                        itemsIndexed(rows, key = { _, t -> t[0].key }, contentType = { _, _ -> "message" }) { index, thread ->
+                            val newest = thread[0]
+                            // A conversation shows as its newest message: unread while any of it is, flagged or with
+                            // an attachment when any of it is.
+                            val h = if (thread.size == 1) {
+                                newest
+                            } else {
+                                newest.copy(
+                                    seen = thread.all { it.seen },
+                                    flagged = thread.any { it.flagged },
+                                    hasAttachments = thread.any { it.hasAttachments },
+                                )
+                            }
                             val row: @Composable (Modifier) -> Unit = { mod ->
                                 MessageRow(
                                     first = index == 0,
@@ -245,15 +274,18 @@ fun MessageList(
                                     onClick = {
                                         if (selection.isNotEmpty()) {
                                             if (h.key in selection) selection.remove(h.key) else selection.add(h.key)
+                                        } else if (thread.size > 1 && onOpenThread != null) {
+                                            onOpenThread(newest)
                                         } else {
-                                            onOpen(h)
+                                            onOpen(newest)
                                         }
                                     },
                                     onLongClick = { if (h.key in selection) selection.remove(h.key) else selection.add(h.key) },
+                                    count = thread.size,
                                 )
                             }
                             if (selection.isEmpty() && (settings.swipeLeft != SwipeAction.NONE || settings.swipeRight != SwipeAction.NONE)) {
-                                SwipeableRow(h, settings.swipeRight, settings.swipeLeft, Modifier.animateItem(), onSwipe = { onSwipe(h, it) }) { row(Modifier) }
+                                SwipeableRow(h, settings.swipeRight, settings.swipeLeft, Modifier.animateItem(), onSwipe = { onSwipe(h, thread, it) }) { row(Modifier) }
                             } else {
                                 row(Modifier.animateItem())
                             }
@@ -386,6 +418,8 @@ fun MessageRow(
     modifier: Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    /** How many messages the row stands for (a conversation); shown next to the sender when more than one. */
+    count: Int = 1,
 ) {
     val context = LocalContext.current
     val unread = !h.seen
@@ -395,6 +429,7 @@ fun MessageRow(
         h.from?.display ?: stringResource(R.string.unknown_sender)
     }
     val key = if (showRecipients) h.to.firstOrNull()?.email.orEmpty() else h.from?.email.orEmpty()
+    val conversationLabel = pluralStringResource(R.plurals.conversation_n, count, count)
     Row(
         modifier
             .fillMaxWidth()
@@ -423,15 +458,31 @@ fun MessageRow(
                     Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(CtrlColors.Accent))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(
-                    who,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium,
-                    color = CtrlColors.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        who,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium,
+                        color = CtrlColors.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (count > 1) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            count.toString(),
+                            style = CtrlType.Status,
+                            color = CtrlColors.Muted,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, CtrlColors.ControlOutline, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                                .semantics { contentDescription = conversationLabel },
+                        )
+                    }
+                }
                 Spacer(Modifier.width(8.dp))
                 Text(
                     shortTime(context, h.date).uppercase(),

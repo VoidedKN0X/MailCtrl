@@ -10,6 +10,9 @@ import kotlinx.serialization.Serializable
 /** The messages in one folder of one account. */
 @Serializable data class FolderRoute(val accountId: String, val folder: String)
 
+/** A conversation: the message [uid] of [folder] and the messages that belong with it. */
+@Serializable data class ConversationRoute(val accountId: String, val folder: String, val uid: Long)
+
 /** One message. */
 @Serializable data class MessageRoute(val accountId: String, val folder: String, val uid: Long)
 

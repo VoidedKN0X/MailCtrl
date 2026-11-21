@@ -32,6 +32,9 @@ internal data class SealedHeader(
     val e: String? = null,
     val t: List<Address> = emptyList(),
     val s: String = "",
+    /** Message-ID, and the Message-IDs it answers: for conversations. */
+    val m: String? = null,
+    val r: List<String> = emptyList(),
 )
 
 /** The part of one folder's message list that is on screen. */
@@ -190,6 +193,8 @@ class MailCache(
         val fromEmail: String?
         val to: List<Address>
         val subject: String
+        var messageId: String? = null
+        var refs: List<String> = emptyList()
         if (getType(6) == Cursor.FIELD_TYPE_BLOB) {
             if (key == null) return null
             val opened = runCatching {
@@ -199,6 +204,8 @@ class MailCache(
             fromEmail = opened.e
             to = opened.t
             subject = opened.s
+            messageId = opened.m
+            refs = opened.r
         } else {
             // From before encryption, or written while there was no key.
             fromName = getString(3)
@@ -219,6 +226,8 @@ class MailCache(
             answered = getInt(10) != 0,
             hasAttachments = getInt(11) != 0,
             size = getLong(12),
+            messageId = messageId,
+            refs = refs,
         )
     }
 
@@ -229,7 +238,7 @@ class MailCache(
         put("account", h.accountId)
         put("folder", h.folder)
         put("uid", h.uid)
-        val sealed = key?.let { seal(it, SealedHeader(h.from?.name, h.from?.email, h.to, h.subject)) }
+        val sealed = key?.let { seal(it, SealedHeader(h.from?.name, h.from?.email, h.to, h.subject, h.messageId, h.refs)) }
         if (sealed != null) {
             putNull("from_name")
             putNull("from_email")
@@ -412,6 +421,30 @@ class MailCache(
 
     suspend fun header(accountId: String, folder: String, uid: Long): MessageHeader? = withContext(Dispatchers.IO) {
         query("SELECT $cols FROM messages WHERE account = ? AND folder = ? AND uid = ?", arrayOf(accountId, folder, uid.toString())).firstOrNull()
+    }
+
+    /**
+     * The real subject of an encrypted message, known once it was decrypted: shown in the list from then on instead
+     * of the "..." on its outside. Only ever written sealed; without a data key the list keeps the outer subject.
+     */
+    suspend fun revealSubject(accountId: String, folder: String, uid: Long, subject: String) = withContext(Dispatchers.IO) {
+        val key = key() ?: return@withContext
+        val h = query("SELECT $cols FROM messages WHERE account = ? AND folder = ? AND uid = ?", arrayOf(accountId, folder, uid.toString())).firstOrNull()
+            ?: return@withContext
+        if (h.subject == subject) return@withContext
+        val sealed = seal(key, SealedHeader(h.from?.name, h.from?.email, h.to, subject, h.messageId, h.refs)) ?: return@withContext
+        writableDatabase.update(
+            "messages",
+            ContentValues().apply {
+                putNull("from_name")
+                putNull("from_email")
+                putNull("to_json")
+                put("subject", sealed)
+            },
+            "account = ? AND folder = ? AND uid = ?",
+            arrayOf(accountId, folder, uid.toString()),
+        )
+        changed(accountId, folder)
     }
 
     /**
