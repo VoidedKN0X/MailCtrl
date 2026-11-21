@@ -111,6 +111,8 @@ data class MessageBody(
     val autocrypt: String? = null,
     /** This is the decrypted content of an encrypted message (it's kept in memory only). */
     val decrypted: Boolean = false,
+    /** It was encrypted with S/MIME (so an answer is encrypted with S/MIME too). */
+    val smimeEncrypted: Boolean = false,
 )
 
 /** OpenPGP in a received message, as found when it was opened. */
@@ -137,6 +139,21 @@ sealed interface PgpPayload {
     class InlineSigned(val text: String, val charset: String) : PgpPayload {
         override val size get() = text.length
     }
+
+    /** S/MIME encrypted (`smime.p7m`, enveloped-data): the encrypted message. */
+    class SmimeEncrypted(val data: ByteArray) : PgpPayload {
+        override val size get() = data.size
+    }
+
+    /** S/MIME signed (`multipart/signed` with `smime.p7s`): the first part exactly as signed, and the signature. */
+    class SmimeSigned(val content: ByteArray, val signature: ByteArray) : PgpPayload {
+        override val size get() = content.size + signature.size
+    }
+
+    /** S/MIME opaque signed (`smime.p7m`, signed-data): the message is inside the signature. */
+    class SmimeOpaque(val data: ByteArray) : PgpPayload {
+        override val size get() = data.size
+    }
 }
 
 /** Something to send. */
@@ -152,6 +169,8 @@ data class OutgoingMessage(
     val references: String? = null,
     /** Encrypt and/or sign with OpenPGP (PGP/MIME). */
     val pgp: com.vknxworks.mailctrl.pgp.PgpOutgoing? = null,
+    /** Encrypt and/or sign with S/MIME instead (RFC 8551). */
+    val smime: com.vknxworks.mailctrl.smime.SmimeOutgoing? = null,
     /** "Autocrypt" header value with your public key, when the account sends it. */
     val autocrypt: String? = null,
     /** The address to send from when it isn't the account's own (one of its identities). */

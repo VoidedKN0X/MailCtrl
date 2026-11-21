@@ -134,6 +134,8 @@ private data class Start(
     /** OpenPGP: start with encrypting and signing on (answering an encrypted message, a saved draft). */
     val encrypt: Boolean = false,
     val sign: Boolean = false,
+    /** Encrypt and sign with S/MIME instead of OpenPGP. */
+    val smime: Boolean = false,
     /** It quotes or forwards an encrypted message. */
     val quotesEncrypted: Boolean = false,
     /** The address it's written from, when that's one of the account's identities (null: the account's own). */
@@ -205,6 +207,7 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 replyUid = d.replyUid,
                 encrypt = d.encrypt,
                 sign = d.sign,
+                smime = d.smime,
                 from = d.from,
             )
         }
@@ -215,8 +218,12 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
             val h = original.header
             val quotedText = plainText(original)
             // An encrypted message is answered (and forwarded) encrypted, when the account has a key.
-            val wasEncrypted = original.decrypted || original.pgp is PgpPayload.Encrypted || original.pgp is PgpPayload.InlineEncrypted
-            val secure = wasEncrypted && account.pgpKey != null
+            val wasEncrypted = original.decrypted || original.pgp is PgpPayload.Encrypted || original.pgp is PgpPayload.InlineEncrypted ||
+                original.pgp is PgpPayload.SmimeEncrypted
+            // S/MIME mail is answered with S/MIME, OpenPGP mail with OpenPGP, as far as the account has what it takes.
+            val wasSmime = original.smimeEncrypted || original.pgp is PgpPayload.SmimeEncrypted
+            val useSmime = wasSmime && account.smimeCert != null
+            val secure = wasEncrypted && (useSmime || (!wasSmime && account.pgpKey != null))
             // Written to one of your identities: answered (and forwarded) from that address, with its signature.
             val from = (h.to + original.cc).firstOrNull { account.isOwn(it.email) }?.email?.takeIf { !it.equals(account.email, ignoreCase = true) }
             val signature = signatureOf(from)
@@ -239,6 +246,7 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                     forwardUid = route.uid,
                     encrypt = secure,
                     sign = secure,
+                    smime = useSmime,
                     quotesEncrypted = wasEncrypted,
                     from = from,
                 )
@@ -266,6 +274,7 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
                 replyUid = route.uid,
                 encrypt = secure,
                 sign = secure,
+                smime = useSmime,
                 quotesEncrypted = wasEncrypted,
                 from = from,
             )
@@ -380,7 +389,23 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
     val recipients = remember(to, cc, bcc) {
         listOf(to, cc, bcc).flatMap { parseAddresses(it).orEmpty() }.map { it.email.trim().lowercase() }.distinct()
     }
-    val missing = if (encrypt) recipients.filter { e -> pgpKeys.none { e in it.info.emails && it.info.canEncrypt } } else emptyList()
+    // S/MIME: the account's own certificate, and the contacts' certificates to encrypt to. An account with only an
+    // S/MIME certificate uses S/MIME; with both, the S/MIME chip picks it.
+    val smimeCerts by c.smimeCerts.certs.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { c.smimeCerts.load() }
+    val ownCert = account?.smimeCert?.let { fp -> smimeCerts.firstOrNull { it.info.fingerprint == fp && it.own } }
+    var smimeChosen by rememberSaveable { mutableStateOf(start.smime) }
+    val useSmime = when {
+        ownCert != null && ownKey != null -> smimeChosen
+        ownCert != null -> true
+        ownKey != null -> false
+        else -> smimeChosen
+    }
+    val missing = when {
+        !encrypt -> emptyList()
+        useSmime -> recipients.filter { e -> smimeCerts.none { e in it.info.emails && it.info.canEncrypt && !it.info.expired() } }
+        else -> recipients.filter { e -> pgpKeys.none { e in it.info.emails && it.info.canEncrypt } }
+    }
 
     LaunchedEffect(Unit) {
         loadProblem?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
@@ -409,6 +434,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         replyUid = start.replyUid,
         encrypt = encrypt,
         sign = sign,
+        smime = useSmime && (encrypt || sign),
         from = account?.sender(fromEmail)?.email?.takeIf { !it.equals(account?.email, ignoreCase = true) },
     )
 
@@ -458,8 +484,17 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             Toast.makeText(context, context.getString(R.string.subject_control_chars), Toast.LENGTH_LONG).show()
             return
         }
-        // Never sent unprotected by surprise: a missing key stops it here, with the reason.
-        if ((encrypt || sign) && ownKey == null) {
+        // Never sent unprotected by surprise: a missing key or certificate stops it here, with the reason.
+        if (useSmime && (encrypt || sign)) {
+            if (ownCert == null) {
+                Toast.makeText(context, context.getString(R.string.smime_error_no_own_cert), Toast.LENGTH_LONG).show()
+                return
+            }
+            if (encrypt && missing.isNotEmpty()) {
+                Toast.makeText(context, context.getString(R.string.smime_error_missing_certs, missing.joinToString(", ")), Toast.LENGTH_LONG).show()
+                return
+            }
+        } else if ((encrypt || sign) && ownKey == null) {
             Toast.makeText(context, context.getString(R.string.pgp_error_no_own_key), Toast.LENGTH_LONG).show()
             return
         }
@@ -467,7 +502,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             Toast.makeText(context, context.getString(R.string.pgp_error_missing_keys, missing.joinToString(", ")), Toast.LENGTH_LONG).show()
             return
         }
-        if (sign && signer == null && ownKey != null && !c.pgp.isOpen(ownKey.info.fingerprint)) {
+        if (!useSmime && sign && signer == null && ownKey != null && !c.pgp.isOpen(ownKey.info.fingerprint)) {
             unlockFor = ownKey.info
             return
         }
@@ -555,7 +590,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
                 colors = ctrlFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (ownKey != null || encrypt || sign) {
+            if (ownKey != null || ownCert != null || encrypt || sign) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     CtrlChip(
                         encrypt,
@@ -564,16 +599,21 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
                         leadingIcon = if (encrypt) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
                     )
                     CtrlChip(sign, onClick = { sign = !sign }, label = stringResource(R.string.pgp_sign), leadingIcon = Icons.Outlined.Verified)
+                    // Both OpenPGP and S/MIME are set up for this account: pick S/MIME here.
+                    if (ownKey != null && ownCert != null) {
+                        CtrlChip(smimeChosen, onClick = { smimeChosen = !smimeChosen }, label = stringResource(R.string.smime_chip))
+                    }
                 }
                 PgpNotes(
-                    hasKey = ownKey != null,
+                    hasKey = if (useSmime) ownCert != null else ownKey != null,
                     encrypt = encrypt,
                     recipients = recipients.size,
                     missing = missing,
-                    canLookUp = settings.wkdLookup,
+                    canLookUp = settings.wkdLookup && !useSmime,
                     quotesEncrypted = start.quotesEncrypted,
                     onLookUp = { wkdQueue = missing },
-                    subjectEncrypted = settings.encryptSubject,
+                    subjectEncrypted = settings.encryptSubject && !useSmime,
+                    smime = useSmime,
                 )
             } else if (start.quotesEncrypted) {
                 PgpNotes(hasKey = false, encrypt = false, recipients = 0, missing = emptyList(), canLookUp = false, quotesEncrypted = true, onLookUp = {})
@@ -762,13 +802,19 @@ private fun PgpNotes(
     onLookUp: () -> Unit,
     /** Settings › OpenPGP › "Encrypt the subject too" is on. */
     subjectEncrypted: Boolean = false,
+    /** The switches use S/MIME instead of OpenPGP. */
+    smime: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         when {
-            !hasKey -> Text(stringResource(R.string.pgp_error_no_own_key), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Error)
+            !hasKey -> Text(
+                stringResource(if (smime) R.string.smime_error_no_own_cert else R.string.pgp_error_no_own_key),
+                style = MaterialTheme.typography.bodySmall,
+                color = CtrlColors.Error,
+            )
             encrypt && missing.isNotEmpty() -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stringResource(R.string.pgp_compose_missing, missing.joinToString(", ")),
+                    stringResource(if (smime) R.string.smime_compose_missing else R.string.pgp_compose_missing, missing.joinToString(", ")),
                     style = MaterialTheme.typography.bodySmall,
                     color = CtrlColors.Error,
                     modifier = Modifier.weight(1f),
@@ -776,7 +822,7 @@ private fun PgpNotes(
                 if (canLookUp) TextButton(onClick = onLookUp) { Text(stringResource(R.string.pgp_wkd_look_up)) }
             }
             encrypt && recipients > 0 -> Text(
-                stringResource(R.string.pgp_compose_encrypted),
+                stringResource(if (smime) R.string.smime_compose_encrypted else R.string.pgp_compose_encrypted),
                 style = MaterialTheme.typography.bodySmall,
                 color = CtrlColors.Muted,
             )

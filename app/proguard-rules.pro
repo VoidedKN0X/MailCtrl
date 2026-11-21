@@ -34,8 +34,9 @@
     public static int i(...);
 }
 
-# Bouncy Castle (OpenPGP). MailCtrl only uses its lightweight API (org.bouncycastle.openpgp, bcpg, crypto), which
-# loads nothing by name, so R8 can shrink it like any other code. Its JCA provider and X.509 parts aren't used.
+# Bouncy Castle (OpenPGP and S/MIME). MailCtrl only uses its lightweight API (org.bouncycastle.openpgp, bcpg,
+# crypto, and the asn1 classes for CMS, PKCS #12 and X.509 certificates), which loads nothing by name, so R8 can
+# shrink it like any other code. Its JCA provider isn't used.
 -dontwarn org.bouncycastle.**
 
 # WorkManager keeps its job list in a Room 2.6.1 database, and Room creates the generated

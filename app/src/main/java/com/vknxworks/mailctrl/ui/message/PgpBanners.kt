@@ -33,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.data.pgp.KeyOffer
 import com.vknxworks.mailctrl.data.pgp.PgpView
+import com.vknxworks.mailctrl.data.smime.SmimeSigView
+import com.vknxworks.mailctrl.smime.SmimeSigStatus
+import org.bouncycastle.asn1.x509.Certificate
 import com.vknxworks.mailctrl.mail.Address
 import com.vknxworks.mailctrl.pgp.PgpEngine
 import com.vknxworks.mailctrl.pgp.SigCheck
@@ -96,6 +99,8 @@ fun PgpBanners(
     from: Address?,
     onUnlock: () -> Unit,
     onLookup: (() -> Unit)?,
+    /** Keep the S/MIME signer's certificate on the phone (to encrypt to them). */
+    onKeepCert: ((Certificate) -> Unit)? = null,
 ) {
     if (view.encrypted) {
         val locked = view.locked
@@ -115,12 +120,68 @@ fun PgpBanners(
                 view.error,
                 border = CtrlColors.Error,
             )
-            else -> Banner(Icons.Outlined.Lock, CtrlColors.AccentText, stringResource(R.string.pgp_encrypted), stringResource(R.string.pgp_encrypted_ok))
+            else -> Banner(
+                Icons.Outlined.Lock,
+                CtrlColors.AccentText,
+                stringResource(R.string.pgp_encrypted),
+                stringResource(if (view.smime) R.string.smime_encrypted_ok else R.string.pgp_encrypted_ok),
+            )
         }
     } else if (view.error != null) {
         Banner(Icons.Outlined.ErrorOutline, CtrlColors.Error, stringResource(R.string.pgp_problem), view.error, border = CtrlColors.Error)
     }
     view.signature?.let { SignatureBanner(it, from, onLookup) }
+    view.smimeSignature?.let { SmimeSignatureBanner(it, from, onKeepCert) }
+}
+
+@Composable
+private fun SmimeSignatureBanner(sig: SmimeSigView, from: Address?, onKeep: ((Certificate) -> Unit)?) {
+    when (sig.status) {
+        SmimeSigStatus.VALID -> {
+            val info = sig.signer
+            val fromEmail = from?.email?.trim()?.lowercase()
+            // A good signature with a certificate for someone else isn't proof the sender wrote it.
+            val otherAddress = info != null && fromEmail != null && fromEmail !in info.emails
+            val expired = info?.expired() == true
+            val warn = !sig.trusted || otherAddress || expired
+            val detail = listOfNotNull(
+                info?.emails?.joinToString(", ")?.takeIf { it.isNotEmpty() },
+                info?.let { stringResource(R.string.smime_issued_by, it.issuer) },
+                stringResource(R.string.smime_sig_untrusted).takeIf { !sig.trusted },
+                info?.let { stringResource(R.string.pgp_sig_other_address, it.emails.joinToString(", ")) }.takeIf { otherAddress },
+                stringResource(R.string.smime_sig_expired).takeIf { expired },
+            ).joinToString("\n")
+            val offer = sig.offer
+            Banner(
+                if (warn) Icons.Outlined.WarningAmber else Icons.Outlined.Verified,
+                if (warn) CtrlColors.Error else CtrlColors.AccentText,
+                stringResource(R.string.smime_sig_valid, info?.name.orEmpty()),
+                detail,
+                action = if (offer != null && onKeep != null && !otherAddress) stringResource(R.string.smime_keep_cert) else null,
+                border = if (warn) CtrlColors.Error else CtrlColors.Outline,
+                onAction = { if (offer != null) onKeep?.invoke(offer) },
+            )
+        }
+        SmimeSigStatus.NO_CERT -> Banner(
+            Icons.AutoMirrored.Outlined.HelpOutline,
+            CtrlColors.Muted,
+            stringResource(R.string.smime_sig_unknown),
+            stringResource(R.string.smime_sig_no_cert),
+        )
+        SmimeSigStatus.UNSUPPORTED -> Banner(
+            Icons.AutoMirrored.Outlined.HelpOutline,
+            CtrlColors.Muted,
+            stringResource(R.string.smime_sig_unknown),
+            stringResource(R.string.smime_sig_unsupported),
+        )
+        SmimeSigStatus.BAD -> Banner(
+            Icons.Outlined.ErrorOutline,
+            CtrlColors.Error,
+            stringResource(R.string.pgp_sig_bad),
+            stringResource(R.string.pgp_sig_bad_body),
+            border = CtrlColors.Error,
+        )
+    }
 }
 
 @Composable

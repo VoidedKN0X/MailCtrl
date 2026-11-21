@@ -100,7 +100,9 @@ class AppContainer(val context: Context) {
     val notifier = Notifier(context)
     /** OpenPGP keys (yours and your contacts'), read from storage in the background the first time they're needed. */
     val pgpKeys by lazy { PgpKeyStore(context).also { store -> appScope.launch { runCatching { store.load() } } } }
-    private val pgpService = lazy { PgpService(pgpKeys, settings) { mail } }
+    val smimeCerts by lazy { com.vknxworks.mailctrl.data.smime.SmimeStore(context).also { store -> appScope.launch { runCatching { store.load() } } } }
+    val smime by lazy { com.vknxworks.mailctrl.data.smime.SmimeService(smimeCerts) }
+    private val pgpService = lazy { PgpService(pgpKeys, settings, { mail }, { smime }) }
     val pgp by pgpService
 
     /** Set by MainActivity for notifications, mailto: links and shares; the main screen consumes it. */
@@ -264,8 +266,10 @@ class AppContainer(val context: Context) {
             val ok = try {
                 if (account == null) throw IllegalStateException(str(R.string.error_no_account))
                 if (draft.encrypt || draft.sign || account.autocrypt) pgpKeys.load()
-                // Checked before the attachments are read: a missing key stops it straight away.
-                val protection = pgp.outgoing(account, draft, signer)
+                if (draft.smime) smimeCerts.load()
+                // Checked before the attachments are read: a missing key or certificate stops it straight away.
+                val protection = if (draft.smime) null else pgp.outgoing(account, draft, signer)
+                val smimeProtection = smime.outgoing(account, draft)
                 val files = attachments()
                 val options = settings.current()
                 val out =
@@ -279,6 +283,7 @@ class AppContainer(val context: Context) {
                         inReplyTo = draft.inReplyTo,
                         references = draft.references,
                         pgp = protection,
+                        smime = smimeProtection,
                         // The key in an Autocrypt header is for the account's own address, not for an identity.
                         autocrypt = if (account.sender(draft.from).email.equals(account.email, ignoreCase = true)) pgp.autocryptHeader(account) else null,
                         from = draft.from,

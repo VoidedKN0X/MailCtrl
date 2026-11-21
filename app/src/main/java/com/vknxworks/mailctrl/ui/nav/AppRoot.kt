@@ -73,6 +73,8 @@ import com.vknxworks.mailctrl.ui.message.MessageScreen
 import com.vknxworks.mailctrl.ui.pgp.PgpGenerateScreen
 import com.vknxworks.mailctrl.ui.pgp.PgpKeyScreen
 import com.vknxworks.mailctrl.ui.pgp.PgpKeysScreen
+import com.vknxworks.mailctrl.ui.smime.SmimeCertScreen
+import com.vknxworks.mailctrl.ui.smime.SmimeCertsScreen
 import com.vknxworks.mailctrl.ui.search.SearchScreen
 import com.vknxworks.mailctrl.ui.settings.NotificationsScreen
 import com.vknxworks.mailctrl.ui.settings.SettingsScreen
@@ -245,6 +247,8 @@ private fun AppNavHost(navController: NavHostController) {
         composable<AccountSetupRoute> { AccountSetupScreen(it.toRoute<AccountSetupRoute>().accountId, first = false) }
         composable<PgpKeysRoute> { PgpKeysScreen() }
         composable<PgpKeyRoute> { PgpKeyScreen(it.toRoute<PgpKeyRoute>().fingerprint) }
+        composable<SmimeCertsRoute> { SmimeCertsScreen() }
+        composable<SmimeCertRoute> { SmimeCertScreen(it.toRoute<SmimeCertRoute>().fingerprint) }
         composable<PgpGenerateRoute> { PgpGenerateScreen(it.toRoute<PgpGenerateRoute>().accountId) }
     }
 }

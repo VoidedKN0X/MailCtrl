@@ -4,6 +4,18 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## Unreleased
+
+### New
+
+- **S/MIME: signed and encrypted mail with a certificate.** Next to OpenPGP, MailCtrl now reads and sends S/MIME, the standard Outlook, Apple Mail and Thunderbird use with certificates from a certificate authority. It's done with the Bouncy Castle MailCtrl already had for OpenPGP; no library was added (its CMS part, which came with it, is now named in the build file). Nothing in it was run on a phone yet: it was checked on a computer against files made by OpenSSL (signatures, encryption and .p12 files both ways), and built by CI.
+  - **Your certificate:** Settings › **S/MIME certificates** › **Import your certificate** reads a .p12 or .pfx file with its password (current and older formats from OpenSSL, Windows, macOS and Firefox). After you confirm what's in it (name, address, issuer, fingerprint), it's kept on the phone encrypted with the phone's secure hardware, and becomes the S/MIME certificate of the accounts whose address it's for; its page has a switch per account, **Share certificate** and **Delete certificate**. The private key is kept **without the file's password**, so signing and decrypting never ask for it. The password itself isn't kept.
+  - **Reading:** messages signed with S/MIME show **S/MIME signed by …** with the address and who issued the certificate. It's shown as a warning when your phone doesn't trust that issuer (Android's own list of certificate authorities and any you installed in Android's settings count), when the certificate is for another address than the sender's, or when it has expired; a changed message shows **Bad signature**. "Opaque" signed messages (the message inside the signature, from some Outlook setups) are shown too. Encrypted messages (`smime.p7m`) are decrypted with your certificate, attachments included, and a signature inside them is checked. Revocation isn't checked (that would contact the certificate authority).
+  - **Contacts' certificates:** when someone's signature checks out, your phone trusts who issued their certificate and it's for their own address, MailCtrl keeps it to encrypt to them later; otherwise the signature line has a **Keep** button. You can also import .cer, .crt or .pem files. They're kept encrypted on the phone.
+  - **Writing:** an account with an S/MIME certificate uses the **Encrypt** and **Sign** switches for S/MIME. When an account has both an OpenPGP key and an S/MIME certificate, an **S/MIME** chip next to the switches picks S/MIME (OpenPGP otherwise). Messages are signed with SHA-256 and encrypted with AES-256 to each recipient's certificate and to yours, so you can read them in Sent; MailCtrl names the recipients whose certificate is missing and never sends unencrypted instead. An S/MIME encrypted message is answered with S/MIME. The subject isn't encrypted with S/MIME (unlike OpenPGP's "Encrypt the subject too"). Send later and Undo send work the same way: the message is signed and encrypted when you tap Send.
+  - **Not supported:** encrypting to elliptic-curve certificates and the newer AES-GCM format; such messages say so. Signing with an elliptic-curve certificate works.
+  - S/MIME certificates are never part of a settings backup.
+
 ## v0.5.0 (2026-11-21)
 
 Built and checked by CI only: nothing in this release had been run on a phone when it was published.

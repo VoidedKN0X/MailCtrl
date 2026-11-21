@@ -16,6 +16,7 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 - **Identities and aliases**: other addresses to send from with the same account, each with its own name and signature
 - **All inboxes**: every account's inbox together, newest first, each message tagged with its account's name and colour; or one account at a time. Each account chooses whether it's in it
 - **OpenPGP encryption built in**: read and send encrypted and signed mail (PGP/MIME), make or import your own keys, import your contacts' keys from files, attachments or Autocrypt, no other app needed (see [Encrypted mail (OpenPGP)](#encrypted-mail-openpgp))
+- **S/MIME too**: read, check and send S/MIME signed and encrypted mail with your certificate from a .p12/.pfx file, as Outlook, Apple Mail and Thunderbird send it (see [Encrypted mail (S/MIME)](#encrypted-mail-smime))
 - **All your folders**, with unread counts; Sent, Drafts, Archive, Junk and Trash are found by themselves
 - **Conversations**: a message and its answers show as one row; tap it to see them all
 - **Read mail safely**: HTML messages are shown without scripts, and pictures from the internet stay blocked until you tap **Load**, or **Always from this sender** for senders you pick (see [Reading mail](#reading-mail))
@@ -130,6 +131,16 @@ MailCtrl encrypts, decrypts, signs and checks signatures itself (with [Bouncy Ca
 - **Look up a key:** when a key is missing, **Look up** asks the person's own mail domain for it ([Web Key Directory](https://wiki.gnupg.org/WKD)). Only when you tap it, after MailCtrl tells you which domain it will contact. Turn the button off in Settings › OpenPGP.
 - **Autocrypt:** turn on **Send my key** in an account's settings to put your public key in every message you send, so people can write back encrypted. Off until you turn it on.
 
+## Encrypted mail (S/MIME)
+
+S/MIME is the other standard for signed and encrypted mail, common at work and with certificate authorities. MailCtrl does it itself too, with the Bouncy Castle it already has for OpenPGP: no other app, no extra library.
+
+- **Your certificate:** Settings › **S/MIME certificates** › **Import your certificate** takes the .p12 or .pfx file you got from your certificate provider (or exported from Windows, macOS, Firefox or Thunderbird), with its password. It becomes the S/MIME certificate of every account whose address it's for; the certificate's page has switches per account. The private key is kept on the phone encrypted with its secure hardware, like your OpenPGP keys, but **without the file's password**: signing and decrypting don't ask for it. Delete the certificate on its page to remove the key.
+- **Reading:** S/MIME signed messages (`smime.p7s`, and "opaque" signed `smime.p7m` from some Outlook setups) show **S/MIME signed by …**, with who issued the certificate. It's a warning instead when your phone doesn't trust who issued it (Android's list of certificate authorities, plus any you installed yourself in Android's settings), when the certificate is for another address than the sender's, or when it has expired; **Bad signature** when the message was changed. Encrypted messages (`smime.p7m`) are decrypted on the phone with your certificate, attachments included, and a signature inside is checked too. Revocation lists (CRL, OCSP) aren't checked: that would contact the certificate authority.
+- **Contacts' certificates:** S/MIME has no key servers: someone's certificate comes with a signed message from them. When the signature checks out, your phone trusts who issued it and it's for the sender's address, MailCtrl keeps it by itself; otherwise the signature line has a **Keep** button. You can also import a .cer, .crt or .pem file under Settings › S/MIME certificates.
+- **Writing:** an account with an S/MIME certificate uses the same **Encrypt** and **Sign** switches; with both an OpenPGP key and an S/MIME certificate, an **S/MIME** chip next to them picks S/MIME. Messages are signed with SHA-256 and encrypted with AES-256 to every recipient's certificate and to yours (so you can read them in Sent); MailCtrl says whose certificate is missing and never falls back to sending unencrypted. Answering an S/MIME encrypted message uses S/MIME. The subject isn't encrypted with S/MIME.
+- **Not supported:** encrypting to elliptic-curve (ECC) certificates and the newer AES-GCM format (such messages say so). Signing with an ECC certificate works. RSA certificates, by far the most common for S/MIME, work for everything.
+
 ## Notifications
 
 MailCtrl checks your inboxes itself, by default every 15 minutes, and notifies you about new mail. There's no push service from Google or anyone else.
@@ -173,7 +184,7 @@ Tapping a notification opens that message. Other apps can't use this to open a m
 Settings › **Back up and restore** writes a small file to a place you pick, and reads one back.
 
 - **In the file:** MailCtrl's settings, and for each account its address, names, signature, identities, colour, switches and server addresses.
-- **Never in the file:** passwords, trusted certificates, OpenPGP keys, the app lock and its PIN, the ntfy push address, mail, drafts, or the lists kept encrypted on the phone (addresses you've mailed, picture senders, snoozed and scheduled messages).
+- **Never in the file:** passwords, trusted certificates, OpenPGP keys, S/MIME certificates and keys, the app lock and its PIN, the ntfy push address, mail, drafts, or the lists kept encrypted on the phone (addresses you've mailed, picture senders, snoozed and scheduled messages).
 - **Restoring asks first** and shows which accounts are added and which are changed. An added account arrives without a password and without trusted certificates: open it and sign in, and MailCtrl checks the servers as for any new account. An account that's already on the phone keeps its server settings, password and certificates. Accounts with an unencrypted connection need a second yes.
 - **Left as they are on the phone:** everything under Privacy and security (app lock, hiding, notification content), how long passphrases are remembered, subject encryption, ntfy and the open connection.
 
@@ -237,6 +248,7 @@ Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORT
 
 - **Only your own servers.** MailCtrl connects to the IMAP and SMTP servers of your accounts and nothing else (and, when you test it, your own ntfy address). There's no MailCtrl server, and no online look-up of server settings: known providers are a list inside the app.
 - **OpenPGP key lookup (optional, on tap only).** When you tap **Look up** for a missing key, MailCtrl asks that person's mail domain for it over HTTPS (Web Key Directory: `openpgpkey.<domain>`, then `<domain>`), after telling you which domain. That domain learns that someone looked the address up, from your connection. Nothing is looked up by itself; turn the button off under Settings › OpenPGP › **Look up keys (WKD)**.
+- **S/MIME certificates** (yours with its private key, and your contacts') are kept on the phone, encrypted with its secure hardware. Checking a signature uses only what's in the message and your phone's own list of certificate authorities: nothing is looked up online.
 - **OpenPGP keys** are kept on the phone, encrypted with its secure hardware; secret keys are also protected by their passphrase, which is only ever kept in memory. Your public key is only sent when you turn on **Send my key (Autocrypt)** for an account, or share it yourself.
 - **Passwords** are encrypted with a key in the phone's secure hardware (its separate security chip, StrongBox, when the phone has one) and only ever sent to your own mail servers. They're never shown again after you save them.
 - **Gmail** goes through Google's standard mail servers only (imap.gmail.com and smtp.gmail.com) with an app password: no Google app, library or sign-in service is built in.
@@ -322,4 +334,4 @@ Native Android apps for self-hosted services and everyday tools, all with the sa
 
 MailCtrl is licensed under the [GNU General Public License v3.0](LICENSE). © VKNXWorks
 
-MailCtrl uses JavaMail for Android (Eclipse Distribution License 1.0 / GPLv2 with Classpath Exception) and Bouncy Castle for OpenPGP (Bouncy Castle Licence, an MIT-style licence). The Space Grotesk and JetBrains Mono fonts are licensed under the SIL Open Font License 1.1; see `FONT-LICENSE-SpaceGrotesk.txt` and `FONT-LICENSE-JetBrainsMono.txt`.
+MailCtrl uses JavaMail for Android (Eclipse Distribution License 1.0 / GPLv2 with Classpath Exception) and Bouncy Castle for OpenPGP and S/MIME (Bouncy Castle Licence, an MIT-style licence). The Space Grotesk and JetBrains Mono fonts are licensed under the SIL Open Font License 1.1; see `FONT-LICENSE-SpaceGrotesk.txt` and `FONT-LICENSE-JetBrainsMono.txt`.

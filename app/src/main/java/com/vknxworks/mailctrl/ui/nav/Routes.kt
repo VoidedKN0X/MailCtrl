@@ -50,6 +50,8 @@ object ComposeMode {
 
 /** One OpenPGP key. */
 @Serializable data class PgpKeyRoute(val fingerprint: String)
+@Serializable data object SmimeCertsRoute
+@Serializable data class SmimeCertRoute(val fingerprint: String)
 
 /** Making a new OpenPGP key, for [accountId] when given. */
 @Serializable data class PgpGenerateRoute(val accountId: String? = null)

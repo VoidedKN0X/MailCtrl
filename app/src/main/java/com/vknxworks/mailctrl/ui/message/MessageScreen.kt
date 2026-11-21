@@ -79,6 +79,7 @@ import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.data.pgp.KeyOffer
 import com.vknxworks.mailctrl.data.pgp.PgpView
+import com.vknxworks.mailctrl.data.smime.SmimeSigView
 import com.vknxworks.mailctrl.data.settings.RemoteContent
 import com.vknxworks.mailctrl.pgp.KeyInfo
 import com.vknxworks.mailctrl.pgp.PgpEngine
@@ -196,10 +197,20 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
         if (b.pgp != null) {
             pgpBusy = true
             try {
-                val v = c.pgp.read(b, openedKey)
+                var v = c.pgp.read(b, openedKey)
+                // S/MIME: the certificate of someone whose signature checks out, that the phone trusts and that's for
+                // the sender's own address, is kept to encrypt to them later (others only when you tap Keep).
+                v.smimeSignature?.let { sig ->
+                    val cert = sig.offer
+                    val fromEmail = b.header.from?.email?.trim()?.lowercase()
+                    val signer = sig.signer
+                    if (cert != null && sig.trusted && signer != null && fromEmail != null && fromEmail in signer.emails && !signer.expired()) {
+                        if (runCatching { c.smime.keep(cert) }.isSuccess) v = v.copy(smimeSignature = SmimeSigView(sig.status, signer, sig.trusted, null))
+                    }
+                }
                 pgpView = v
-                // Answering or forwarding quotes the decrypted text.
-                if (v.body.decrypted) {
+                // Answering or forwarding quotes the decrypted text (or the text taken out of an S/MIME signature).
+                if (v.body.decrypted || v.unwrapped) {
                     c.lastOpened = v.body
                     // An encrypted subject: the list shows the real one from now on (kept encrypted on the phone).
                     val real = v.body.header.subject
@@ -279,6 +290,13 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
                             s.body.header.from,
                             onUnlock = { unlocking = view.locked },
                             onLookup = s.body.header.from?.email?.takeIf { settings.wkdLookup }?.let { email -> { wkdEmail = email } },
+                            onKeepCert = { cert ->
+                                c.runTask {
+                                    c.smime.keep(cert)
+                                    pgpView = pgpView?.let { pv -> pv.smimeSignature?.let { sg -> pv.copy(smimeSignature = SmimeSigView(sg.status, sg.signer, sg.trusted, null)) } ?: pv }
+                                    Toast.makeText(context, context.getString(R.string.smime_kept), Toast.LENGTH_SHORT).show()
+                                }
+                            },
                         )
                     }
                     offer?.let { o ->

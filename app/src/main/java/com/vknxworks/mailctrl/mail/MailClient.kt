@@ -19,9 +19,13 @@ import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.data.accounts.Account
 import com.vknxworks.mailctrl.data.accounts.AccountStore
 import com.vknxworks.mailctrl.data.pgp.friendly
+import com.vknxworks.mailctrl.data.smime.friendly
 import com.vknxworks.mailctrl.pgp.PgpEngine
 import com.vknxworks.mailctrl.pgp.PgpFailure
 import com.vknxworks.mailctrl.pgp.PgpMime
+import com.vknxworks.mailctrl.smime.SmimeEngine
+import com.vknxworks.mailctrl.smime.SmimeFailure
+import com.vknxworks.mailctrl.smime.SmimeMime
 import com.vknxworks.mailctrl.str
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -816,6 +820,8 @@ class MailClient(private val context: Context, private val accounts: AccountStor
     private fun isAttachment(p: Part): Boolean {
         // A PGP/MIME signature isn't a file for you to open.
         if (p.isMimeType("application/pgp-signature") || p.isMimeType("application/pgp-encrypted")) return false
+        // Nor is an S/MIME signature (smime.p7s).
+        if (p.isMimeType("application/pkcs7-signature") || p.isMimeType("application/x-pkcs7-signature")) return false
         val disposition = runCatching { p.disposition }.getOrNull()
         if (Part.ATTACHMENT.equals(disposition, ignoreCase = true)) return true
         if (p.isMimeType("message/rfc822")) return true
@@ -1010,7 +1016,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         // OpenPGP signed or encrypted messages are needed whole (up to a limit), whatever their size: the
         // signature covers the exact bytes, and decrypting needs all of it anyway.
         val topType = runCatching { m.contentType }.getOrNull().orEmpty().lowercase()
-        val pgpMime = topType.startsWith("multipart/signed") || topType.startsWith("multipart/encrypted")
+        val pgpMime = topType.startsWith("multipart/signed") || topType.startsWith("multipart/encrypted") || SmimeMime.isWholeMessageType(topType)
         val raw = if (size in 0..WHOLE_MAX || (pgpMime && size in 0..PGP_WHOLE_MAX)) {
             runCatching { ByteArrayOutputStream(size + 1024).also { m.writeTo(it) }.toByteArray() }.getOrNull()
         } else {
@@ -1049,7 +1055,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         collect(source, "", parts)
         val pgp = pgpPayload(source, raw, parts)
         // Encrypted: the parts are just the version line and the encrypted blob, nothing to show yet.
-        if (pgp is PgpPayload.Encrypted) {
+        if (pgp is PgpPayload.Encrypted || pgp is PgpPayload.SmimeEncrypted || pgp is PgpPayload.SmimeOpaque) {
             parts.attachments.clear()
             parts.text = null
             parts.html = null
@@ -1085,6 +1091,16 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             }
             null -> Unit
         }
+        // S/MIME: encrypted or opaque signed (smime.p7m), or signed with smime.p7s.
+        when (val found = runCatching { SmimeMime.find(source) }.getOrNull()) {
+            is SmimeMime.Found.Encrypted -> return PgpPayload.SmimeEncrypted(found.data)
+            is SmimeMime.Found.Opaque -> return PgpPayload.SmimeOpaque(found.data)
+            is SmimeMime.Found.Signed -> {
+                val content = raw?.let { PgpMime.signedContent(it, found.boundary) }
+                if (content != null) return PgpPayload.SmimeSigned(content, found.signature)
+            }
+            null -> Unit
+        }
         val text = parts.text ?: return null
         // Only at the start of a line: a block quoted in a reply ("> -----BEGIN …") isn't this message's own.
         return when {
@@ -1099,7 +1115,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
      * Returns the inner signature to check too, when it was signed and then encrypted as a separate step.
      * The decrypted message is kept in memory only (until MailCtrl locks), so its attachments can be opened.
      */
-    fun decryptedBody(original: MessageBody, inner: ByteArray): Pair<MessageBody, PgpPayload.Signed?> {
+    fun decryptedBody(original: MessageBody, inner: ByteArray): Pair<MessageBody, PgpPayload?> {
         val h = original.header
         val firstLine = String(inner, 0, minOf(inner.size, 200), Charsets.ISO_8859_1).substringBefore('\n')
         // Some programs encrypt bare text instead of a MIME part.
@@ -1110,8 +1126,13 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         val parts = Collected()
         collect(msg, "", parts)
         decrypteds.put(bodyKey(h.accountId, h.folder, h.uid), inner)
-        val signed = (runCatching { PgpMime.find(msg) }.getOrNull() as? PgpMime.Found.Signed)?.let { f ->
+        val signed: PgpPayload? = (runCatching { PgpMime.find(msg) }.getOrNull() as? PgpMime.Found.Signed)?.let { f ->
             PgpMime.signedContent(inner, f.boundary)?.let { PgpPayload.Signed(it, f.signature) }
+        } ?: when (val f = runCatching { SmimeMime.find(msg) }.getOrNull()) {
+            // S/MIME signs first and then encrypts, so the signature is inside.
+            is SmimeMime.Found.Signed -> PgpMime.signedContent(inner, f.boundary)?.let { PgpPayload.SmimeSigned(it, f.signature) }
+            is SmimeMime.Found.Opaque -> PgpPayload.SmimeOpaque(f.data)
+            else -> null
         }
         // Protected headers: the real subject travels inside the encryption (the outer one can be a placeholder).
         val subject = runCatching { msg.getHeader("Subject")?.let { msg.subject } }.getOrNull()?.trim()
@@ -1263,6 +1284,8 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         when {
             // OpenPGP's own parts (a signature, the "Version: 1" line) are handled by MailCtrl, not shown as files.
             type == "application/pgp-signature" || type == "application/pgp-encrypted" -> Unit
+            // Likewise an S/MIME signature (smime.p7s).
+            SmimeMime.isSignaturePart(type) -> Unit
             !isAttachment(p) && type == "text/html" && out.html == null -> out.html = readText(p)
             !isAttachment(p) && type == "text/plain" && out.text == null -> {
                 out.text = readText(p)
@@ -1539,7 +1562,22 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         // Both come from the message being answered, so they're put on one clean line first.
         out.inReplyTo?.unfoldedHeader()?.takeIf { it.isNotBlank() }?.let { m.setHeader("In-Reply-To", it) }
         out.references?.unfoldedHeader()?.takeIf { it.isNotBlank() }?.let { m.setHeader("References", MimeUtility.fold(12, it)) }
-        if (pgp == null) {
+        val smime = out.smime
+        if (smime != null) {
+            // S/MIME: the text and attachments go into one inner part, which is signed (multipart/signed with
+            // smime.p7s) and then, when encrypting, encrypted as a whole into smime.p7m. The subject stays as it is.
+            val inner = PgpMime.Inner()
+            fillContent(inner, out, protect = true)
+            var bytes = PgpMime.serialize(inner)
+            val signer = smime.signer
+            val signed = signer?.let { SmimeMime.signed(bytes, SmimeEngine.sign(bytes, it)) }
+            if (smime.encryptTo.isNotEmpty()) {
+                if (signed != null) bytes = SmimeMime.serializeSigned(signed)
+                SmimeMime.putEncrypted(m, SmimeEngine.encrypt(bytes, smime.encryptTo))
+            } else {
+                m.setContent(signed ?: throw SmimeFailure(SmimeFailure.Kind.NOT_SMIME))
+            }
+        } else if (pgp == null) {
             fillContent(m, out, protect = false)
         } else {
             // PGP/MIME: the text and attachments go into one inner part, which is encrypted (and signed inside the
@@ -1634,6 +1672,8 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             build(session, a, out)
         } catch (e: PgpFailure) {
             throw MailException(e.friendly(), e)
+        } catch (e: SmimeFailure) {
+            throw MailException(e.friendly(), e)
         } catch (e: Exception) {
             throw MailException(str(R.string.error_build), e)
         }
@@ -1671,6 +1711,8 @@ class MailClient(private val context: Context, private val accounts: AccountStor
             val mime = build(session, a, out)
             ByteArrayOutputStream().also { mime.writeTo(it) }.toByteArray()
         } catch (e: PgpFailure) {
+            throw MailException(e.friendly(), e)
+        } catch (e: SmimeFailure) {
             throw MailException(e.friendly(), e)
         } catch (e: Exception) {
             throw MailException(str(R.string.error_build), e)

@@ -137,6 +137,9 @@ dependencies {
     // OpenPGP (encrypting, signing, keys): Bouncy Castle's lightweight API, MIT-style licence, from Maven Central.
     implementation(libs.bouncycastle.pg)
     implementation(libs.bouncycastle.prov)
+    // S/MIME's CMS structures (SignedData, EnvelopedData). Already part of the app through bcpg; named here
+    // because MailCtrl now uses it directly. Same version, nothing new is downloaded.
+    implementation(libs.bouncycastle.util)
 
     testImplementation(libs.junit)
 }

@@ -65,6 +65,8 @@ data class Account(
     val junkFolder: String? = null,
     /** Your own OpenPGP key for this account (fingerprint): it signs, and you encrypt to it too. */
     val pgpKey: String? = null,
+    /** Your own S/MIME certificate for this account (SHA-256 fingerprint): it signs, and you encrypt to it too. */
+    val smimeCert: String? = null,
     /** Send your public key in an Autocrypt header with every message (off until you turn it on). */
     val autocrypt: Boolean = false,
     /** The account's colour in lists (an index into the account colours), or -1 for one picked from the account. */

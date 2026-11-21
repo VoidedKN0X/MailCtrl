@@ -38,6 +38,7 @@ android-activation = { module = "com.sun.mail:android-activation", version.ref =
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 bouncycastle-pg = { module = "org.bouncycastle:bcpg-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-util = { module = "org.bouncycastle:bcutil-jdk18on", version.ref = "bouncycastle" }
 junit = { module = "junit:junit", version.ref = "junit" }
 # Build classpath only (never in the APK): pins the Kotlin Gradle plugin that AGP 9's built-in Kotlin uses.
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }

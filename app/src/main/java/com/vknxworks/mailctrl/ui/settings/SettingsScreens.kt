@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Contrast
@@ -110,6 +111,7 @@ import com.vknxworks.mailctrl.ui.nav.DraftsRoute
 import com.vknxworks.mailctrl.ui.nav.LocalNavigator
 import com.vknxworks.mailctrl.ui.nav.NotificationsRoute
 import com.vknxworks.mailctrl.ui.nav.PgpKeysRoute
+import com.vknxworks.mailctrl.ui.nav.SmimeCertsRoute
 import com.vknxworks.mailctrl.ui.nav.SettingsRoute
 import com.vknxworks.mailctrl.ui.theme.CtrlColors
 import com.vknxworks.mailctrl.ui.theme.CtrlType
@@ -219,6 +221,13 @@ fun YouScreen() {
                     icon = Icons.Outlined.VpnKey,
                     showChevron = true,
                     onClick = { nav.navigate(PgpKeysRoute) },
+                )
+                GroupRow(
+                    stringResource(R.string.smime_certs),
+                    stringResource(R.string.smime_certs_subtitle),
+                    icon = Icons.Outlined.Badge,
+                    showChevron = true,
+                    onClick = { nav.navigate(SmimeCertsRoute) },
                 )
             }
 
@@ -354,6 +363,13 @@ fun SettingsScreen() {
                     icon = Icons.Outlined.VpnKey,
                     showChevron = true,
                     onClick = { nav.navigate(PgpKeysRoute) },
+                )
+                GroupRow(
+                    stringResource(R.string.smime_certs),
+                    stringResource(R.string.smime_certs_subtitle),
+                    icon = Icons.Outlined.Badge,
+                    showChevron = true,
+                    onClick = { nav.navigate(SmimeCertsRoute) },
                 )
                 GroupChoice(
                     stringResource(R.string.pgp_remember),

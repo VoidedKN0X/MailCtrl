@@ -32,7 +32,7 @@ object PgpMime {
      * A part written out byte for byte as it was signed. JavaMail would otherwise rebuild its headers and could
      * re-encode its content, and the signature would no longer match.
      */
-    private class ExactPart(private val bytes: ByteArray) : MimeBodyPart(ByteArrayInputStream(bytes)) {
+    internal class ExactPart(private val bytes: ByteArray) : MimeBodyPart(ByteArrayInputStream(bytes)) {
         override fun writeTo(os: OutputStream) {
             os.write(bytes)
         }
@@ -41,7 +41,7 @@ object PgpMime {
     }
 
     /** A multipart with the extra Content-Type parameters PGP/MIME needs (protocol, micalg). */
-    private class PgpMultipart(subtype: String, params: List<Pair<String, String>>) : MimeMultipart(subtype) {
+    internal class PgpMultipart(subtype: String, params: List<Pair<String, String>>) : MimeMultipart(subtype) {
         init {
             val ct = ContentType(contentType)
             params.forEach { (k, v) -> ct.setParameter(k, v) }
@@ -176,7 +176,7 @@ object PgpMime {
         return canonical(text.substring(contentStart, end).toByteArray(Charsets.ISO_8859_1))
     }
 
-    private fun InputStream.readLimited(): ByteArray {
+    internal fun InputStream.readLimited(): ByteArray {
         val out = ByteArrayOutputStream()
         val buf = ByteArray(16 * 1024)
         var total = 0L

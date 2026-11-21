@@ -20,6 +20,11 @@ import com.vknxworks.mailctrl.pgp.SigCheck
 import com.vknxworks.mailctrl.pgp.UnlockedKey
 import com.vknxworks.mailctrl.pgp.Wkd
 import com.vknxworks.mailctrl.str
+import com.vknxworks.mailctrl.data.smime.SmimeService
+import com.vknxworks.mailctrl.data.smime.SmimeSigView
+import com.vknxworks.mailctrl.data.smime.friendly
+import com.vknxworks.mailctrl.smime.SmimeFailure
+import com.vknxworks.mailctrl.smime.SmimeSigStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,6 +43,12 @@ data class PgpView(
     val locked: KeyInfo? = null,
     /** Why it couldn't be decrypted or checked, for people. */
     val error: String? = null,
+    /** It was S/MIME (encrypted with S/MIME, when [encrypted]). */
+    val smime: Boolean = false,
+    /** Its S/MIME signature, checked. */
+    val smimeSignature: SmimeSigView? = null,
+    /** The message was inside an S/MIME signature (opaque signed) and has been taken out of it. */
+    val unwrapped: Boolean = false,
 )
 
 /** A public key found in a message (Autocrypt) or elsewhere, offered for import. */
@@ -64,6 +75,7 @@ class PgpService(
     private val keys: PgpKeyStore,
     private val settings: SettingsRepository,
     private val mail: () -> MailClient,
+    private val smime: () -> SmimeService,
 ) {
     private class Remembered(val key: UnlockedKey, val until: Long)
 
@@ -124,8 +136,11 @@ class PgpService(
                 }
                 is PgpPayload.Encrypted -> decrypt(body, p.data, key) { dec ->
                     val (inner, signed) = mail().decryptedBody(body, dec.data)
-                    inner to (dec.signature ?: signed?.let { s -> check { PgpEngine.verifyDetached(s.content, s.signature, keys.lookup) } })
+                    inner to (dec.signature ?: (signed as? PgpPayload.Signed)?.let { s -> check { PgpEngine.verifyDetached(s.content, s.signature, keys.lookup) } })
                 }
+                is PgpPayload.SmimeSigned -> PgpView(body, smime = true, smimeSignature = smimeCheck(p.content, p.signature).first)
+                is PgpPayload.SmimeOpaque -> smimeOpaque(body, p.data, encrypted = false)
+                is PgpPayload.SmimeEncrypted -> smimeDecrypt(body, p.data)
                 is PgpPayload.InlineEncrypted -> {
                     val block = INLINE_BLOCK.find(p.text)?.value ?: return@withContext PgpView(body)
                     val hidden = body.copy(text = p.text.replace(block, "").trim().ifEmpty { null })
@@ -143,6 +158,35 @@ class PgpService(
             throw e
         } catch (e: PgpFailure) {
             PgpView(body.copy(pgp = null), encrypted = body.pgp is PgpPayload.Encrypted || body.pgp is PgpPayload.InlineEncrypted, error = e.friendly())
+        } catch (e: SmimeFailure) {
+            PgpView(body.copy(pgp = null), encrypted = body.pgp is PgpPayload.SmimeEncrypted, error = e.friendly(), smime = true)
+        }
+    }
+
+    /** An S/MIME signature check that never fails the whole message: a broken signature reads as "bad". */
+    private suspend fun smimeCheck(content: ByteArray?, signature: ByteArray): Pair<SmimeSigView, ByteArray?> = try {
+        smime().verify(content, signature)
+    } catch (e: SmimeFailure) {
+        SmimeSigView(if (e.kind == SmimeFailure.Kind.UNSUPPORTED) SmimeSigStatus.UNSUPPORTED else SmimeSigStatus.BAD, null, false, null) to null
+    }
+
+    /** An opaque S/MIME signature: check it and show the message inside it. */
+    private suspend fun smimeOpaque(body: MessageBody, data: ByteArray, encrypted: Boolean): PgpView {
+        val (sig, content) = smimeCheck(null, data)
+        if (content == null) return PgpView(body.copy(pgp = null), encrypted = encrypted, smime = true, smimeSignature = sig)
+        val (shown, _) = mail().decryptedBody(body, content)
+        return PgpView(shown.copy(decrypted = encrypted), encrypted = encrypted, smime = true, smimeSignature = sig, unwrapped = true)
+    }
+
+    /** An S/MIME encrypted message: decrypt it with your certificates, then check a signature inside. */
+    private suspend fun smimeDecrypt(body: MessageBody, data: ByteArray): PgpView {
+        val inner = smime().decrypt(data)
+        val (decrypted, signed) = mail().decryptedBody(body, inner)
+        val shown = decrypted.copy(smimeEncrypted = true)
+        return when (signed) {
+            is PgpPayload.SmimeSigned -> PgpView(shown, encrypted = true, smime = true, smimeSignature = smimeCheck(signed.content, signed.signature).first)
+            is PgpPayload.SmimeOpaque -> smimeOpaque(shown, signed.data, encrypted = true)
+            else -> PgpView(shown, encrypted = true, smime = true)
         }
     }
 
