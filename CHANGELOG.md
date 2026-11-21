@@ -22,6 +22,7 @@ Built and checked by CI only: nothing in this section has been run on a phone.
 
 ### Fixed
 
+- **Fixed before release: the app would have crashed at start with the new build tools.** MailCtrl uses WorkManager for its background work, and WorkManager stores its jobs in a small Room database that is created by name when the app starts. The shrinker (R8) in Android Gradle Plugin 9 is stricter than the old one and removed the constructor that needs, which makes the app stop right at launch (a known problem with Room 2.6.1 under Android Gradle Plugin 9). A keep rule for that constructor, the same one newer Room versions ship themselves, is now in `app/proguard-rules.pro`. No released version was affected: the new build tools have not been in any release. Built by CI only; not yet run on a phone.
 - **"Mark as read" and "Delete" on a notification are more reliable on a slow connection.** Tapping one of them used to sign in to the mail server and do the work inside the few seconds Android gives a notification button; on a slow or unreachable server Android could stop MailCtrl first and the action was lost. The notification still disappears at once, and the work is now handed to a short background job (the same kind that checks for new mail), which starts right away and isn't cut off. Nothing else changes: if the server can't be reached the action isn't repeated later, as before. The job's details (account, folder and message number) are kept by Android's job queue in MailCtrl's private storage until it has run.
 
 ### Security

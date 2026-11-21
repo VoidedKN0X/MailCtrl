@@ -37,3 +37,10 @@
 # Bouncy Castle (OpenPGP). MailCtrl only uses its lightweight API (org.bouncycastle.openpgp, bcpg, crypto), which
 # loads nothing by name, so R8 can shrink it like any other code. Its JCA provider and X.509 parts aren't used.
 -dontwarn org.bouncycastle.**
+
+# WorkManager keeps its job list in a Room 2.6.1 database, and Room creates the generated
+# WorkDatabase_Impl by reflection through its no-argument constructor. Room 2.6.1's own rule
+# (-keep class * extends androidx.room.RoomDatabase) names no members, and the R8 in Android
+# Gradle Plugin 9 no longer keeps a constructor for such a rule, so without this line the app
+# would crash at start (NoSuchMethodException: WorkDatabase_Impl.<init>). Same rule Room 2.7 ships.
+-keep class * extends androidx.room.RoomDatabase { void <init>(); }
