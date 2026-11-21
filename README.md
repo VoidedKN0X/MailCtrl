@@ -29,7 +29,7 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 - **Archive, delete, flag, mark read or unread and move** messages; select several at once with a long press
 - **Swipe actions** you choose for left and right, with **Undo** for archive and delete
 - **Search on the server**: in the inbox, Sent, Archive or every folder, so it finds all your mail, not just what's on the phone
-- **New-mail notifications** with **Mark as read** and **Delete**, checked in the background and **instantly with ntfy** (see [Notifications](#notifications))
+- **New-mail notifications** with **Mark as read** and **Delete**, checked in the background, **instantly with ntfy**, or instantly over an **open connection (IMAP IDLE)** without ntfy (see [Notifications](#notifications))
 - **Any IMAP provider**: known addresses only need a password; anything else takes a server address
 - **Proton Mail** through hydroxide or Proton Mail Bridge on your own server (see [Proton Mail](#proton-mail))
 - **Self-signed certificates** you choose to trust, matched by their exact fingerprint
@@ -152,6 +152,14 @@ For **instant notifications**, MailCtrl can be woken through the **[ntfy](https:
 
    (Check goimapnotify's own documentation for the exact format of your version.)
 
+For **instant notifications without ntfy**, turn on **Instant with an open connection** on the same screen (off until you do). MailCtrl then keeps one connection to each notifying account's inbox open, and the mail server itself says so the moment a message arrives (IMAP IDLE); MailCtrl runs its normal check and notifies you. Things to know:
+
+- Android only lets a connection stay open in the background from a foreground service, so it shows a notification, **Waiting for new mail**, while this is on. You can hide that notification in Android's settings (channel **Open connection**).
+- It uses more battery than the scheduled check: the connection is asked for a sign of life every ten minutes, and made again when the network changes.
+- Set MailCtrl's Battery to **Unrestricted** (the **Battery** row on that screen), otherwise Android may stop it while the phone sleeps. It starts again after a restart of the phone, and when you open MailCtrl.
+- The screen shows per account whether it's connected. A server without IMAP IDLE is only checked on the schedule; whether hydroxide offers it depends on its version.
+- While account passwords are sealed with the app PIN (app lock on and notifications off) there are no notifications at all, so this doesn't run either.
+
 A wake-up carries no mail at all: MailCtrl ignores what's in it and checks your servers itself, so the push address can't be used to show you fake mail. Background checks keep running as a fallback.
 
 **Notification content** (under Settings) chooses what notifications show: sender and subject, the sender only, or just "New mail". Until you pick one yourself, notifications show the sender and subject, or just "New mail" while the [app lock](#app-lock) is on, so a locked MailCtrl doesn't show your mail in the notification shade. Once you pick one, your choice is used whether the app lock is on or off. The lock screen only shows "New mail" unless Android is set to show everything there.
@@ -203,9 +211,10 @@ Every permission MailCtrl has, and what it's for:
 | Internet (`INTERNET`) | Connecting to your own mail servers (IMAP and SMTP), to your own ntfy address when you tap **Send a test wake-up**, and to a recipient's mail domain when you tap **Look up** for their OpenPGP key |
 | Network state (`ACCESS_NETWORK_STATE`) | Only running background mail checks when the phone is online |
 | Notifications (`POST_NOTIFICATIONS`) | New-mail notifications; asked for when you turn notifications on |
-| Run at startup (`RECEIVE_BOOT_COMPLETED`) | Setting the background mail checks up again after the phone restarts (through Android's WorkManager) |
+| Run at startup (`RECEIVE_BOOT_COMPLETED`) | Setting the background mail checks up again after the phone restarts (through Android's WorkManager), and the open connection when **Instant with an open connection** is on |
 | Prevent phone from sleeping (`WAKE_LOCK`) | Keeping the phone awake for the few seconds a mail check, a message sent later or a snooze wake-up takes (added by WorkManager) |
 | Ignore battery optimisations (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) | The **Battery** row under profile picture › **Notifications**: when you tap it, Android asks whether MailCtrl may run unrestricted, so checks aren't delayed while the phone sleeps. Nothing changes unless you tap it and say yes |
+| Foreground service (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`) | Only for **Instant with an open connection** (IMAP IDLE), off until you turn it on: the service that keeps a connection to your own mail servers open, with its notification. Mail checks never run as a foreground service |
 | Biometrics (`USE_BIOMETRIC`) | Optional fingerprint unlock for the app lock |
 | Hide other apps' floating windows (`HIDE_OVERLAY_WINDOWS`) | Hide other apps' floating windows over the PIN screen, the lock screen and confirmations, so nothing can be drawn over them to trick a tap |
 

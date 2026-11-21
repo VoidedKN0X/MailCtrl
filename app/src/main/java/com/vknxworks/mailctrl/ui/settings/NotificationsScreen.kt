@@ -53,6 +53,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vknxworks.mailctrl.R
 import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.data.settings.AppSettings
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.LinkOff
+import com.vknxworks.mailctrl.notify.IdleControl
+import com.vknxworks.mailctrl.notify.IdleState
 import com.vknxworks.mailctrl.notify.NotifyChecker
 import com.vknxworks.mailctrl.notify.NotifySchedule
 import com.vknxworks.mailctrl.notify.UnifiedPush
@@ -79,6 +83,7 @@ fun notificationsSummary(s: AppSettings): String = when {
     else -> listOfNotNull(
         if (s.notifyInterval > 0) intervalLabel(s.notifyInterval) else null,
         if (s.pushEnabled && s.pushEndpoint != null) stringResource(R.string.notify_summary_push) else null,
+        if (s.idle) stringResource(R.string.notify_summary_idle) else null,
     ).joinToString(" · ").ifBlank { stringResource(R.string.notify_on) }
 }
 
@@ -174,6 +179,7 @@ fun NotificationsScreen() {
                         Icons.Outlined.Schedule,
                     ) { v -> update { it.copy(notifyInterval = v) } }
                     PushRows(s, tick, ::update)
+                    IdleRows(s, ::update)
                     val lastCheck = remember(tick, s) { NotifyChecker.lastCheck(context) }
                     val lastPush = remember(tick, s) { NotifyChecker.lastPush(context) }
                     GroupRow(
@@ -228,6 +234,43 @@ fun NotificationsScreen() {
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * "Instant with an open connection" (IMAP IDLE): the switch, and while it's on how each account's connection is
+ * doing.
+ */
+@Composable
+private fun IdleRows(s: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
+    val c = LocalContext.current.container
+    val accounts by c.accounts.accounts.collectAsStateWithLifecycle()
+    val states by IdleControl.states.collectAsStateWithLifecycle()
+    GroupSwitch(
+        stringResource(R.string.idle_title),
+        stringResource(R.string.idle_subtitle),
+        s.idle,
+        Icons.Outlined.Link,
+    ) { on -> update { it.copy(idle = on) } }
+    if (s.idle) {
+        accounts.filter { it.notify }.forEach { a ->
+            val state = states[a.id]
+            GroupRow(
+                a.title,
+                stringResource(
+                    when (state) {
+                        IdleState.WAITING -> R.string.idle_state_waiting
+                        IdleState.CONNECTING -> R.string.idle_state_connecting
+                        IdleState.UNSUPPORTED -> R.string.idle_state_unsupported
+                        IdleState.REFUSED -> R.string.idle_state_refused
+                        IdleState.RETRYING -> R.string.idle_state_retrying
+                        null -> R.string.idle_state_stopped
+                    },
+                ),
+                if (state == IdleState.WAITING) Icons.Outlined.Link else Icons.Outlined.LinkOff,
+                iconTint = if (state == IdleState.WAITING || state == IdleState.CONNECTING) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

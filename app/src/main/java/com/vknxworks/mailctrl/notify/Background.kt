@@ -94,6 +94,8 @@ class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         try {
             // Passwords sealed with the app lock and MailCtrl is locked: nothing can sign in until it's unlocked.
             if (c.backgroundBlocked()) return Result.success()
+            // "Instant with an open connection" on, but Android stopped its service: started again when Android allows.
+            runCatching { IdleControl.apply(applicationContext, c.settings.current()) }
             // A push usually arrives the moment the mail does; give the server a moment to file it.
             if (inputData.getBoolean(KEY_PUSH, false)) delay(2_000)
             NotifyChecker.check(c)

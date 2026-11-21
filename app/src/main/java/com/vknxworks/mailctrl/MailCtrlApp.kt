@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.vknxworks.mailctrl.notify.IdleControl
 import com.vknxworks.mailctrl.notify.NotifySchedule
 import com.vknxworks.mailctrl.ui.lock.AppLock
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -37,6 +38,16 @@ class MailCtrlApp : Application() {
                 .map { Triple(it.notifyEnabled, it.notifyInterval, it.pushEnabled) }
                 .distinctUntilChanged()
                 .collect { runCatching { NotifySchedule.apply(this@MailCtrlApp, c.settings.current()) } }
+        }
+        // "Instant with an open connection" (IMAP IDLE): its service follows the two settings it depends on.
+        c.appScope.launch {
+            c.settings.stored.map { it.notifyEnabled to it.idle }.distinctUntilChanged().collect { (_, idle) ->
+                runCatching {
+                    // The channel only exists once you've turned this on, so it doesn't sit unused in Android's settings.
+                    if (idle) c.notifier.createIdleChannel()
+                    IdleControl.apply(this@MailCtrlApp, c.settings.current())
+                }
+            }
         }
         // Turning notifications on or off changes whether passwords may be sealed (only while unlocked).
         c.appScope.launch {

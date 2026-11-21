@@ -627,4 +627,18 @@
     <string name="snoozed_footer">Hidden from the lists on this phone until then. Nothing changes on the mail server, so other mail apps keep showing them.</string>
     <string name="snoozed_until">Until %1$s</string>
     <string name="later_interrupted">Android stopped MailCtrl while this was being sent. Check your Sent folder before you send it again.</string>
+    <!-- IMAP IDLE -->
+    <string name="idle_title">Instant with an open connection</string>
+    <string name="idle_subtitle">MailCtrl keeps a connection to each inbox open, and the mail server says so the moment mail arrives (IMAP IDLE). No ntfy needed. Android shows a notification while it runs, and it uses more battery than the scheduled check.</string>
+    <string name="idle_notification">Waiting for new mail</string>
+    <string name="idle_notification_body">A connection to your mail servers is open, so new mail is announced at once.</string>
+    <string name="channel_idle">Open connection</string>
+    <string name="channel_idle_desc">The notification Android shows while \"Instant with an open connection\" keeps a connection to your mail servers open. You can hide it here; the connection keeps working.</string>
+    <string name="idle_state_waiting">Connected: new mail is announced at once</string>
+    <string name="idle_state_connecting">Signing in…</string>
+    <string name="idle_state_unsupported">This server has no IMAP IDLE: checked on the schedule only</string>
+    <string name="idle_state_refused">Sign-in refused. Check the account\'s password, then turn this off and on again.</string>
+    <string name="idle_state_retrying">No connection right now; trying again by itself</string>
+    <string name="idle_state_stopped">Not running. Open MailCtrl or set Battery to Unrestricted so Android lets it start.</string>
+    <string name="notify_summary_idle">open connection</string>
 </resources>

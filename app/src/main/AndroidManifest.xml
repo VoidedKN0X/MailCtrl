@@ -15,8 +15,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- "Battery: unrestricted" button on the Notifications screen, so checks aren't delayed while the phone sleeps. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <!-- Added by WorkManager for work that runs as a foreground service. Mail checks never do. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+    <!-- "Instant with an open connection" (IMAP IDLE, off until you turn it on): the service that keeps a
+         connection to your own mail servers open so new mail is announced at once. Android only lets a
+         connection stay open in the background from a foreground service; this is the type for uses that fit
+         none of Android's ready-made ones. Mail checks themselves never run as a foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- Only ntfy is looked up, to register for wake-ups (UnifiedPush). -->
     <queries>
@@ -119,6 +123,25 @@
                 <action android:name="org.unifiedpush.android.connector.RAISE_TO_FOREGROUND" />
             </intent-filter>
         </service>
+
+        <!-- "Instant with an open connection": only runs while that setting is on. Never exported. -->
+        <service
+            android:name=".notify.IdleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a connection to the user's own mail servers open (IMAP IDLE) so new mail is announced at once" />
+        </service>
+        <!-- After the phone restarts, that connection is set up again when the setting is on. Only Android
+             itself can send this broadcast. -->
+        <receiver
+            android:name=".notify.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Hands one downloaded attachment at a time to the app you open or share it with. Never exported;
              access is granted per file. -->

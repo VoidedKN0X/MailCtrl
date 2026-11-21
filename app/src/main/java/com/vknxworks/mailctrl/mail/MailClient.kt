@@ -290,7 +290,14 @@ class MailClient(private val context: Context, private val accounts: AccountStor
 
     // ------------------------------------------------------------------ sessions
 
-    private fun session(server: ServerConfig, smtp: Boolean, trust: ServerTrust, from: String? = null): Pair<Session, String> {
+    private fun session(
+        server: ServerConfig,
+        smtp: Boolean,
+        trust: ServerTrust,
+        from: String? = null,
+        /** How long to wait for the server to say something (longer for a connection that waits for new mail). */
+        readTimeoutMs: Int = 30_000,
+    ): Pair<Session, String> {
         val proto = when {
             smtp && server.security == Security.SSL -> "smtps"
             smtp -> "smtp"
@@ -302,7 +309,7 @@ class MailClient(private val context: Context, private val accounts: AccountStor
         p["$k.host"] = server.host
         p["$k.port"] = server.port.toString()
         p["$k.connectiontimeout"] = "15000"
-        p["$k.timeout"] = "30000"
+        p["$k.timeout"] = readTimeoutMs.toString()
         p["$k.writetimeout"] = "30000"
         // Only plain password sign-in; never NTLM, which leaks the phone's name.
         p["$k.auth.mechanisms"] = "PLAIN LOGIN"
@@ -449,6 +456,54 @@ class MailClient(private val context: Context, private val accounts: AccountStor
                 }
             }
         }
+
+    /**
+     * One more connection to an account, with its inbox open, that waits for the server to say that mail arrived
+     * (IMAP IDLE, RFC 2177). Separate from the connections lists and messages use. Every call blocks: only from a
+     * background thread.
+     */
+    class IdleLink internal constructor(
+        private val store: IMAPStore,
+        private val inbox: IMAPFolder,
+        /** The server offers IDLE. */
+        val supported: Boolean,
+    ) {
+        /** How many messages the inbox has, as the server last said. */
+        fun count(): Int = inbox.messageCount
+
+        /** Waits until the server says something about the inbox (or [poke] or [close] is called from elsewhere). */
+        fun idle() = inbox.idle(true)
+
+        /** Ends the wait from another thread and asks the server for a sign of life, so the connection isn't dropped. */
+        fun poke() {
+            inbox.doCommand(IMAPFolder.ProtocolCommand { p -> p.noop(); null })
+        }
+
+        fun close() {
+            runCatching { inbox.close(false) }
+            runCatching { store.close() }
+        }
+    }
+
+    /** Signs in once more and opens the inbox, for [IdleLink]. Blocks; throws what a sign-in can throw. */
+    fun openIdle(accountId: String): IdleLink {
+        val a = accounts.get(accountId) ?: throw MailException(str(R.string.error_no_account))
+        val password = passwordOf(a)
+        val trust = ServerTrust.forServer(a.imap.host, a.trustedCerts).also { it.clearRejection() }
+        val (session, proto) = session(a.imap, smtp = false, trust = trust, readTimeoutMs = IDLE_READ_MS)
+        val store = session.getStore(proto) as IMAPStore
+        try {
+            store.connect(a.imap.host, a.imap.port, a.imap.username, password)
+            // Asked before the inbox opens: afterwards JavaMail would sign in a second connection to ask.
+            val supported = store.hasCapability("IDLE")
+            val inbox = store.getFolder("INBOX") as IMAPFolder
+            inbox.open(Folder.READ_ONLY)
+            return IdleLink(store, inbox, supported)
+        } catch (e: Exception) {
+            runCatching { store.close() }
+            throw translate(e, trust)
+        }
+    }
 
     /** Closes every open connection (when the app is locked, the network changes, or an account changes). */
     fun closeAll() {
@@ -1717,6 +1772,12 @@ class MailClient(private val context: Context, private val accounts: AccountStor
 
         /** An Autocrypt header longer than this isn't a key MailCtrl wants (a normal one is a few kilobytes). */
         private const val AUTOCRYPT_MAX = 64 * 1024
+
+        /**
+         * A connection waiting for new mail gives up when the server says nothing for this long (the app asks for
+         * a sign of life well before, see IdleService), and is then made again.
+         */
+        private const val IDLE_READ_MS = 14 * 60_000
 
         /** What the outside of a message says in place of an encrypted subject (as Thunderbird and K-9 do). */
         const val HIDDEN_SUBJECT = "..."

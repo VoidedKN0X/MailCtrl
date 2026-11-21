@@ -36,6 +36,16 @@ class Notifier(private val context: Context) {
         )
     }
 
+    /** The channel of the notification Android shows while a connection waits for new mail (made when that's turned on). */
+    fun createIdleChannel() {
+        nm.createNotificationChannel(
+            NotificationChannel(CH_IDLE, context.getString(R.string.channel_idle), NotificationManager.IMPORTANCE_LOW).apply {
+                description = context.getString(R.string.channel_idle_desc)
+                setShowBadge(false)
+            },
+        )
+    }
+
     private fun color() = ContextCompat.getColor(context, R.color.notify_accent)
 
     /**
@@ -230,6 +240,7 @@ class Notifier(private val context: Context) {
     companion object {
         const val CH_MAIL = "mail"
         const val CH_PROBLEMS = "problems"
+        const val CH_IDLE = "idle"
         private const val TAG = "mail"
         private const val TAG_PROBLEM = "problem"
         private const val LINK_PREFS = "notify_links"
