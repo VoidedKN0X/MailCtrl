@@ -60,6 +60,8 @@ import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.ui.accounts.AccountSetupScreen
 import com.vknxworks.mailctrl.ui.compose.ComposeScreen
 import com.vknxworks.mailctrl.ui.compose.DraftsScreen
+import com.vknxworks.mailctrl.ui.compose.LaterScreen
+import com.vknxworks.mailctrl.ui.compose.UndoSendBar
 import com.vknxworks.mailctrl.ui.components.CtrlBottomBar
 import com.vknxworks.mailctrl.ui.components.CtrlNavItem
 import com.vknxworks.mailctrl.ui.components.LocalBottomClearance
@@ -130,6 +132,7 @@ private fun MainScaffold() {
 
     CompositionLocalProvider(LocalNavigator provides navigator) {
         BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            val wide = maxWidth >= 600.dp
             if (maxWidth >= 600.dp) {
                 // Tablets and unfolded foldables: a side rail.
                 Row(Modifier.fillMaxSize()) {
@@ -160,6 +163,14 @@ private fun MainScaffold() {
             } else {
                 PhoneLayout(navController, showTabs = selectedIndex >= 0, selectedIndex = selectedIndex, onSelect = ::selectTab)
             }
+            // A message held for the Undo seconds: over every screen, above the bottom bar.
+            UndoSendBar(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = if (!wide && selectedIndex >= 0) 104.dp else 16.dp),
+            )
         }
     }
 }
@@ -226,6 +237,7 @@ private fun AppNavHost(navController: NavHostController) {
         }
         composable<ComposeRoute> { ComposeScreen(it.toRoute<ComposeRoute>()) }
         composable<DraftsRoute> { DraftsScreen() }
+        composable<LaterRoute> { LaterScreen() }
 
         composable<YouRoute> { YouScreen() }
         composable<SettingsRoute> { SettingsScreen() }

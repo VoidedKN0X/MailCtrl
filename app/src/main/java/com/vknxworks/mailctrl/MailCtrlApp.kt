@@ -61,6 +61,8 @@ class MailCtrlApp : Application() {
                 // After switching networks while MailCtrl is open, sign in again right away too.
                 c.mail.onNetworkChanged = { if (foreground) signInAhead() }
                 signInAhead()
+                // Snoozed messages whose time passed while the phone slept show again as soon as MailCtrl opens.
+                c.appScope.launch { runCatching { c.wakeSnoozed() } }
             }
 
             override fun onStop(owner: LifecycleOwner) {

@@ -179,6 +179,37 @@ class Notifier(private val context: Context) {
         runCatching { nm.activeNotifications.filter { it.tag == TAG }.forEach { nm.cancel(it.tag, it.id) } }
     }
 
+    /**
+     * A snoozed message is back in the list. Shows as much as [content] allows, like new mail, and opens the
+     * message when tapped.
+     */
+    fun snoozedBack(account: Account, h: MessageHeader, content: NotificationContent, multipleAccounts: Boolean) {
+        if (!allowed(context)) return
+        val label = context.getString(R.string.snooze_back)
+        val sender = h.from?.display ?: context.getString(R.string.unknown_sender)
+        val subject = h.subject.ifBlank { context.getString(R.string.no_subject) }
+        val (title, text) = when (content) {
+            NotificationContent.SENDER_AND_SUBJECT -> sender to subject
+            NotificationContent.SENDER_ONLY -> sender to label
+            NotificationContent.NOTHING -> label to null
+        }
+        val id = idFor(h)
+        val b = Notification.Builder(context, CH_MAIL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(if (multipleAccounts) AccountColors.of(account) else color())
+            .setContentTitle(title)
+            .setSubText(if (multipleAccounts && content != NotificationContent.NOTHING) account.title + " · " + label else label)
+            .setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .setContentIntent(openIntent(h, id))
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                Notification.Builder(context, CH_MAIL).setSmallIcon(R.drawable.ic_notification).setColor(color()).setContentTitle(label).build(),
+            )
+        if (text != null) b.setContentText(text)
+        runCatching { nm.notify(TAG, id, b.build()) }
+    }
+
     /** A message couldn't be sent: shown so it isn't lost silently while you're elsewhere. */
     fun sendFailed(account: Account, subject: String, reason: String) {
         if (!allowed(context)) return

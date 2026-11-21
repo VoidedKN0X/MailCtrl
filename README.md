@@ -23,6 +23,8 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 - **Write, reply, reply all and forward**, with Cc and Bcc, attachments from any app, and the original attachments when forwarding
 - **Recipient suggestions** from the addresses you've mailed before, with no contacts permission
 - **Drafts** kept on the phone, encrypted, so a message you started is never lost
+- **Send later** at a time you pick, and **Undo send** for a few seconds after you tap Send (see [Send later, Undo send and Snooze](#send-later-undo-send-and-snooze))
+- **Snooze** a message until later
 - **Attachments**: open them in another app, share them or save them wherever you like
 - **Archive, delete, flag, mark read or unread and move** messages; select several at once with a long press
 - **Swipe actions** you choose for left and right, with **Undo** for archive and delete
@@ -102,6 +104,17 @@ Then:
 - **Unsubscribe**: when a newsletter offers it, it's in the message's menu.
 - MailCtrl keeps a **list of your messages** on the phone (sender, subject, date, flags) so it opens instantly, and refreshes it by downloading only what changed, in as few requests as possible. Sender, recipients and subject are encrypted in that list (AES-256-GCM, with a key protected by the phone's secure hardware); folder names, dates and flags are not, because the list is sorted and filtered by them.
 - Like Thunderbird, it **downloads messages ahead**: after each refresh, the newest 50 messages of the folder (up to 256 KB each, so attachments mostly stay on the server) come down in a few batched requests and are **kept on the phone, encrypted** (AES-256-GCM, with a key protected by the phone's secure hardware). They open instantly, even without a connection. Up to 300 MB in all; the ones you haven't opened in the longest time go first. Turn off Settings › Reading › **Keep messages on this phone** to keep messages in memory only (the saved copies are removed at once).
+
+## Send later, Undo send and Snooze
+
+Mail servers have no standard way to send a message later or to snooze one, so MailCtrl does all three on the phone.
+
+- **Send later:** under the text of a message, **Send later** picks a time. The message is put together at once (signed or encrypted then, with its attachments) and waits on the phone until Android's WorkManager sends it. The phone has to be on and online at that time, and Android may run it a few minutes late while the phone sleeps.
+- **Undo send:** Settings › Writing › **Undo send** (off by default) holds every message for 5 to 30 seconds. A bar at the bottom offers **Undo** until then; after that the message is sent in the background, also when MailCtrl was closed meanwhile.
+- **Waiting messages** are encrypted on the phone (AES-256-GCM, with a key protected by the phone's secure hardware). They aren't sealed with the app PIN, so they can go out while MailCtrl is locked. Only when your account passwords are sealed with the PIN (app lock on and notifications off) does a message wait until you unlock.
+- **When sending fails,** the message stays under profile picture › **Scheduled and snoozed** with the reason, and you get a notification. MailCtrl only tries again by itself when the server was never reached, so a message can't go out twice.
+- **Snooze:** a message's menu (and the menu of selected messages) has **Snooze**. The message is hidden from the lists on this phone until the time you pick, then shows again with a notification. Nothing changes on the server: other mail apps and webmail keep showing it.
+- **Scheduled and snoozed** lists both: send a waiting message now or cancel it (it becomes a draft again, without attachments), and show a snoozed message again now.
 
 ## Encrypted mail (OpenPGP)
 
@@ -191,7 +204,7 @@ Every permission MailCtrl has, and what it's for:
 | Network state (`ACCESS_NETWORK_STATE`) | Only running background mail checks when the phone is online |
 | Notifications (`POST_NOTIFICATIONS`) | New-mail notifications; asked for when you turn notifications on |
 | Run at startup (`RECEIVE_BOOT_COMPLETED`) | Setting the background mail checks up again after the phone restarts (through Android's WorkManager) |
-| Prevent phone from sleeping (`WAKE_LOCK`) | Keeping the phone awake for the few seconds a mail check takes (added by WorkManager) |
+| Prevent phone from sleeping (`WAKE_LOCK`) | Keeping the phone awake for the few seconds a mail check, a message sent later or a snooze wake-up takes (added by WorkManager) |
 | Ignore battery optimisations (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) | The **Battery** row under profile picture › **Notifications**: when you tap it, Android asks whether MailCtrl may run unrestricted, so checks aren't delayed while the phone sleeps. Nothing changes unless you tap it and say yes |
 | Biometrics (`USE_BIOMETRIC`) | Optional fingerprint unlock for the app lock |
 | Hide other apps' floating windows (`HIDE_OVERLAY_WINDOWS`) | Hide other apps' floating windows over the PIN screen, the lock screen and confirmations, so nothing can be drawn over them to trick a tap |
@@ -210,7 +223,7 @@ Android also lists a "dynamic receiver" permission (`DYNAMIC_RECEIVER_NOT_EXPORT
 - **Encrypted connections** (SSL/TLS or STARTTLS) are checked like a browser does. A server whose certificate the phone doesn't trust is refused unless you trust that exact certificate yourself. STARTTLS is required, never optional: a server that suddenly stops offering it is refused rather than used unencrypted. "None" is only for servers on your own network or over a VPN.
 - **No tracking pixels:** pictures from the internet stay blocked unless you load them, and the message viewer never looks links up online.
 - **The phone's name stays private:** MailCtrl greets mail servers with a neutral address instead of your phone's name, makes Message-IDs without the app's name in them, and adds no "sent with" header.
-- **On the phone:** your accounts, settings, drafts (encrypted), the addresses you've mailed (for suggestions) and the senders whose pictures always load (both encrypted), the list of your messages (senders, recipients and subjects encrypted; folder names, dates and flags not), and copies of recent messages (encrypted; turn off **Keep messages on this phone** to keep them in memory only). Downloaded attachments are cleared when MailCtrl starts again. Decrypted OpenPGP messages are kept in memory only, never written to storage, and forgotten when MailCtrl locks or closes.
+- **On the phone:** your accounts, settings, drafts (encrypted), the addresses you've mailed (for suggestions) and the senders whose pictures always load (both encrypted), messages waiting to be sent later and the list of snoozed messages (encrypted), the list of your messages (senders, recipients and subjects encrypted; folder names, dates and flags not), and copies of recent messages (encrypted; turn off **Keep messages on this phone** to keep them in memory only). Downloaded attachments are cleared when MailCtrl starts again. Decrypted OpenPGP messages are kept in memory only, never written to storage, and forgotten when MailCtrl locks or closes.
 - **Links:** the **Make an app password** button opens your provider's own page (myaccount.google.com, login.yahoo.com or account.apple.com) in your browser, the **Install ntfy** button (when ntfy is missing) opens ntfy's page on f-droid.org, and the Support, Report a bug, Source code and Licence rows open GitHub or gnu.org. Only when you tap them; MailCtrl itself never contacts these sites.
 - **Message viewer:** HTML mail is shown in a locked-down web view with no scripts, forms or frames and no online link checks or usage reports. Links in a message ask before they open in your browser.
 - **No automatic backups:** Android doesn't back up MailCtrl's data or move it to a new phone. Your mail stays on your servers; on a new phone you just sign in again.

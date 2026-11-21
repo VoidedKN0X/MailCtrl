@@ -44,3 +44,9 @@
 # Gradle Plugin 9 no longer keeps a constructor for such a rule, so without this line the app
 # would crash at start (NoSuchMethodException: WorkDatabase_Impl.<init>). Same rule Room 2.7 ships.
 -keep class * extends androidx.room.RoomDatabase { void <init>(); }
+
+# WorkManager makes MailCtrl's workers (mail checks, notification actions, Send later, Snooze) by class name
+# through this constructor. Named with its members, as the R8 in Android Gradle Plugin 9 wants it.
+-keep class * extends androidx.work.ListenableWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}

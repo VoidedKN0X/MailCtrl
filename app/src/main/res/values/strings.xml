@@ -581,4 +581,49 @@
         <item quantity="one">%1$d message</item>
         <item quantity="other">Conversation of %1$d messages</item>
     </plurals>
+    <!-- Send later, undo send, snooze -->
+    <string name="ok">OK</string>
+    <string name="send_later">Send later</string>
+    <string name="send_later_note">A message sent later waits on this phone, encrypted, and is sent by MailCtrl at that time: the phone has to be on and online then.</string>
+    <string name="when_later_today">Later today</string>
+    <string name="when_this_evening">This evening</string>
+    <string name="when_tomorrow">Tomorrow morning</string>
+    <string name="when_next_week">Next week</string>
+    <string name="when_pick">Pick a date and time</string>
+    <string name="when_next">Next</string>
+    <string name="when_past">Pick a time at least a minute from now.</string>
+    <string name="later_title">Scheduled and snoozed</string>
+    <string name="later_subtitle">%1$d to send later, %2$d snoozed</string>
+    <string name="later_empty">Nothing scheduled or snoozed</string>
+    <string name="later_empty_body">Messages you send later and messages you snooze show here.</string>
+    <string name="later_scheduled_title">Sent later</string>
+    <string name="later_scheduled_footer">Kept on this phone exactly as they will be sent, encrypted with the phone\'s secure hardware (not with the app PIN, so they can go out while MailCtrl is locked). Android may send one a few minutes late when the phone is asleep.</string>
+    <string name="later_at">Sends %1$s</string>
+    <string name="later_scheduled">Will be sent %1$s</string>
+    <string name="later_send_now">Send now</string>
+    <string name="later_cancel">Cancel sending</string>
+    <string name="later_cancel_title">Cancel sending this message?</string>
+    <string name="later_cancel_body">It becomes a draft again. Attachments aren\'t kept with drafts, so add them again before you send it.</string>
+    <string name="later_already_sent">That message is already being sent.</string>
+    <string name="later_cant_keep">This message can\'t be kept encrypted on this phone right now, so it can\'t be scheduled. It\'s still a draft.</string>
+    <string name="later_unreadable">This message can\'t be read on this phone any more. It\'s left where it is; cancel it here to remove it.</string>
+    <string name="later_list_unreadable">The saved list of messages to send later can\'t be read on this phone right now. It\'s left as it is, and nothing new can be scheduled.</string>
+    <string name="later_locked">Waiting until you unlock MailCtrl: the password is sealed with the app PIN.</string>
+    <string name="undo_send">Undo send</string>
+    <string name="undo_send_off">Off: send at once</string>
+    <string name="undo_send_footer">With Undo send, a message waits that long before it goes out, and a bar at the bottom lets you take it back. It\'s sent in the background when the time is up, also if you close MailCtrl meanwhile.</string>
+    <plurals name="undo_send_seconds">
+        <item quantity="one">%1$d second</item>
+        <item quantity="other">%1$d seconds</item>
+    </plurals>
+    <plurals name="undo_send_in">
+        <item quantity="one">Sending in %1$d second</item>
+        <item quantity="other">Sending in %1$d seconds</item>
+    </plurals>
+    <string name="snooze">Snooze</string>
+    <string name="snooze_back">Snoozed message is back</string>
+    <string name="snooze_end">Show again now</string>
+    <string name="snoozed_title">Snoozed</string>
+    <string name="snoozed_footer">Hidden from the lists on this phone until then. Nothing changes on the mail server, so other mail apps keep showing them.</string>
+    <string name="snoozed_until">Until %1$s</string>
 </resources>

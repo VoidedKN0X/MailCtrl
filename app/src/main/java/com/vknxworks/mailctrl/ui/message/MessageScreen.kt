@@ -43,6 +43,8 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Report
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Snooze
+import com.vknxworks.mailctrl.ui.components.WhenPicker
 import androidx.compose.material.icons.outlined.Unsubscribe
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -145,6 +147,7 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
     var more by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var snoozing by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
     // Pictures of this sender always load ("Always from this sender"), and this message in its own colours.
     val pictureSenders by c.pictureSenders.senders.collectAsStateWithLifecycle()
@@ -309,6 +312,7 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
                 leave()
             })
             add(SheetAction(stringResource(R.string.move_to), Icons.Outlined.DriveFileMove) { moving = true })
+            add(SheetAction(stringResource(R.string.snooze), Icons.Outlined.Snooze) { snoozing = true })
             if (hasJunk) {
                 add(SheetAction(stringResource(R.string.move_to_junk), Icons.Outlined.Report) {
                     c.runTask { c.actions.junk(listOf(h)) }
@@ -331,6 +335,14 @@ fun MessageScreen(accountId: String, folder: String, uid: Long) {
             }
         }
         ActionSheet(h.subject.ifBlank { stringResource(R.string.no_subject) }, h.from?.display, actions, onDismiss = { more = false })
+    }
+
+    if (snoozing && h != null) {
+        WhenPicker(stringResource(R.string.snooze), onDismiss = { snoozing = false }) { until ->
+            snoozing = false
+            c.runTask { c.snooze(listOf(h), until) }
+            leave()
+        }
     }
 
     if (moving && h != null) {

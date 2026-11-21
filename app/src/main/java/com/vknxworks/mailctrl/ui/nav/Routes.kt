@@ -38,6 +38,9 @@ object ComposeMode {
 }
 
 @Serializable data object DraftsRoute
+
+/** Messages waiting to be sent ("Send later") and snoozed messages. */
+@Serializable data object LaterRoute
 @Serializable data object YouRoute
 @Serializable data object SettingsRoute
 @Serializable data object NotificationsRoute

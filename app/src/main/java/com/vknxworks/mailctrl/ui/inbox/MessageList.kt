@@ -39,6 +39,8 @@ import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Report
+import androidx.compose.material.icons.outlined.Snooze
+import com.vknxworks.mailctrl.ui.components.WhenPicker
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -137,6 +139,8 @@ fun MessageList(
      * a message and its answers show as one row; without it every message has its own row.
      */
     onOpenThread: ((MessageHeader) -> Unit)? = null,
+    /** Leave out snoozed messages until their time (every list does; "Scheduled and snoozed" shows them). */
+    hideSnoozed: Boolean = true,
     empty: @Composable () -> Unit,
 ) {
     val c = LocalContext.current.container
@@ -149,9 +153,12 @@ fun MessageList(
     val pending = remember { mutableStateListOf<String>() }
     // Worked out again only when the list, what was swiped away or the selection changes (not on every redraw),
     // and looked up in a set instead of going through a list for every message.
-    val shown by remember(headers) {
+    // Snoozed on this phone: left out until their time.
+    val snoozed by c.snoozes.hidden.collectAsStateWithLifecycle()
+    val shown by remember(headers, hideSnoozed) {
         derivedStateOf {
-            if (pending.isEmpty()) headers else pending.toSet().let { gone -> headers.filter { it.key !in gone } }
+            val gone = if (hideSnoozed && snoozed.isNotEmpty()) snoozed + pending else pending.toSet()
+            if (gone.isEmpty()) headers else headers.filter { it.key !in gone }
         }
     }
     // Conversations: a message and its answers are one row (the newest first in it). Off: one row per message.
@@ -237,6 +244,7 @@ fun MessageList(
 
     var moving by remember { mutableStateOf<List<MessageHeader>?>(null) }
     var more by remember { mutableStateOf(false) }
+    var snoozing by remember { mutableStateOf<List<MessageHeader>?>(null) }
 
     Column(modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -360,6 +368,7 @@ fun MessageList(
         val junk = chosen.all { h -> c.accounts.get(h.accountId)?.junkFolder.let { it != null && it != h.folder } }
         val actions = buildList {
             add(SheetAction(context.getString(R.string.move_to), Icons.Outlined.DriveFileMove) { moving = chosen })
+            if (hideSnoozed) add(SheetAction(context.getString(R.string.snooze), Icons.Outlined.Snooze) { snoozing = chosen })
             if (junk) {
                 add(SheetAction(context.getString(R.string.move_to_junk), Icons.Outlined.Report) {
                     val sel = chosen
@@ -371,6 +380,14 @@ fun MessageList(
         }
         if (oneAccount) {
             ActionSheet(pluralStringResource(R.plurals.selected_count, chosen.size, chosen.size), null, actions, onDismiss = { more = false })
+        }
+    }
+
+    snoozing?.let { items ->
+        WhenPicker(stringResource(R.string.snooze), onDismiss = { snoozing = null }) { until ->
+            snoozing = null
+            selection.clear()
+            c.runTask { c.snooze(items, until) }
         }
     }
 

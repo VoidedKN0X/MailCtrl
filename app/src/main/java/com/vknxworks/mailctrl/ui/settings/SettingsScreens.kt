@@ -56,6 +56,9 @@ import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import com.vknxworks.mailctrl.ui.nav.LaterRoute
 import androidx.compose.material.icons.outlined.Settings as SettingsIcon
 import androidx.compose.material.icons.automirrored.outlined.Subject
 import androidx.compose.material.icons.outlined.Timer
@@ -113,6 +116,9 @@ import com.vknxworks.mailctrl.ui.theme.CtrlType
 import com.vknxworks.mailctrl.ui.theme.Gutter
 import kotlinx.coroutines.launch
 
+/** The choices for "Undo send": how many seconds a message waits before it really goes out. */
+private val UNDO_SECONDS = listOf(0, 5, 10, 20, 30)
+
 private const val SPONSOR_URL = "https://github.com/sponsors/VoidedKN0X"
 private const val REPO_URL = "https://github.com/VoidedKN0X/MailCtrl"
 private const val ISSUES_URL = "$REPO_URL/issues"
@@ -126,6 +132,8 @@ fun YouScreen() {
     val nav = LocalNavigator.current
     val accounts by c.accounts.accounts.collectAsStateWithLifecycle()
     val drafts by c.drafts.drafts.collectAsStateWithLifecycle()
+    val waiting by c.outbox.items.collectAsStateWithLifecycle()
+    val snoozed by c.snoozes.items.collectAsStateWithLifecycle()
     val settings by c.settings.settings.collectAsStateWithLifecycle()
     fun open(url: String) {
         AppLock.expectReturn()
@@ -190,6 +198,13 @@ fun YouScreen() {
                     icon = Icons.Outlined.NotificationsActive,
                     showChevron = true,
                     onClick = { nav.navigate(NotificationsRoute) },
+                )
+                GroupRow(
+                    stringResource(R.string.later_title),
+                    stringResource(R.string.later_subtitle, waiting.count { !it.undo }, snoozed.size),
+                    icon = Icons.Outlined.Schedule,
+                    showChevron = true,
+                    onClick = { nav.navigate(LaterRoute) },
                 )
                 GroupRow(
                     stringResource(R.string.drafts_local),
@@ -310,13 +325,20 @@ fun SettingsScreen() {
                 }
             }
 
-            Group(stringResource(R.string.group_writing)) {
+            Group(stringResource(R.string.group_writing), footer = stringResource(R.string.undo_send_footer)) {
                 GroupSwitch(
                     stringResource(R.string.suggest_recipients),
                     stringResource(R.string.suggest_recipients_subtitle),
                     s.suggestRecipients,
                     icon = Icons.Outlined.PersonSearch,
                 ) { v -> update { it.copy(suggestRecipients = v) } }
+                GroupChoice(
+                    stringResource(R.string.undo_send),
+                    UNDO_SECONDS.map { n -> n to if (n == 0) stringResource(R.string.undo_send_off) else pluralStringResource(R.plurals.undo_send_seconds, n, n) },
+                    s.undoSend,
+                    icon = Icons.AutoMirrored.Outlined.Undo,
+                    fallbackLabel = pluralStringResource(R.plurals.undo_send_seconds, s.undoSend, s.undoSend),
+                ) { v -> update { it.copy(undoSend = v) } }
                 GroupRow(
                     stringResource(R.string.mailed_forget),
                     pluralStringResource(R.plurals.mailed_n, mailed.size, mailed.size),

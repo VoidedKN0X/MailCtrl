@@ -63,7 +63,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.text.HtmlCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vknxworks.mailctrl.R
+import com.vknxworks.mailctrl.ComposeRestore
 import com.vknxworks.mailctrl.container
+import androidx.compose.material.icons.outlined.Schedule
+import com.vknxworks.mailctrl.ui.components.CtrlSecondaryButton
+import com.vknxworks.mailctrl.ui.components.WhenPicker
 import com.vknxworks.mailctrl.data.drafts.Draft
 import com.vknxworks.mailctrl.data.local.MailedAddress
 import com.vknxworks.mailctrl.data.local.RecipientSuggestions
@@ -182,7 +186,13 @@ private suspend fun buildStart(context: Context, route: ComposeRoute, fallbackAc
     when (route.mode) {
         ComposeMode.DRAFT -> {
             val d = route.draftId?.let { c.drafts.get(it) } ?: return Start(account.id, body = signature)
+            // Taken back with Undo a moment ago: its attachments come back with it.
+            val restore = c.composeRestore.remove(d.id)
             return Start(
+                files = restore?.files.orEmpty(),
+                forwarded = restore?.forwarded.orEmpty(),
+                forwardFolder = restore?.forwardFolder,
+                forwardUid = restore?.forwardUid,
                 accountId = d.accountId,
                 to = d.to.joinToString(", ") { it.formatted() },
                 cc = d.cc.joinToString(", ") { it.formatted() },
@@ -347,6 +357,8 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
     val forwarded = remember { mutableStateListOf<Attachment>().apply { addAll(start.forwarded) } }
     var picking by remember { mutableStateOf(false) }
     var discarding by remember { mutableStateOf(false) }
+    // "Send later": picking the time.
+    var scheduling by remember { mutableStateOf(false) }
     // Sent or thrown away: nothing to keep as a draft when the screen closes.
     var finished by remember { mutableStateOf(false) }
     val account = accounts.firstOrNull { it.id == accountId } ?: accounts.firstOrNull()
@@ -424,8 +436,12 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         }
     }
 
-    /** [signer]: your key, just opened with its passphrase to sign this message. */
-    fun send(signer: UnlockedKey? = null) {
+    // The time picked for "Send later", kept while the passphrase is asked for.
+    var sendAt by remember { mutableStateOf<Long?>(null) }
+
+    /** [signer]: your key, just opened with its passphrase to sign this message. [at]: "Send later", when. */
+    fun send(signer: UnlockedKey? = null, at: Long? = sendAt) {
+        sendAt = at
         val a = account ?: return
         val toList = parseAddresses(to)
         val ccList = parseAddresses(cc)
@@ -461,7 +477,8 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
         val fwdFolder = start.forwardFolder
         val fwdUid = start.forwardUid
         finished = true
-        Toast.makeText(context, context.getString(R.string.sending), Toast.LENGTH_SHORT).show()
+        if (at == null) Toast.makeText(context, context.getString(R.string.sending), Toast.LENGTH_SHORT).show()
+        val restore = ComposeRestore(local.map { it.uri }, fwd, fwdFolder, fwdUid)
         c.send(d, attachments = {
             val out = mutableListOf<OutgoingAttachment>()
             var total = 0L
@@ -482,7 +499,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
                 }
             }
             out
-        }, signer = signer)
+        }, signer = signer, sendAt = at, restore = restore)
         nav.back()
     }
 
@@ -497,7 +514,7 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             Spacer(Modifier.width(8.dp))
             CtrlSquareButton(Icons.Outlined.Delete, stringResource(R.string.discard), onClick = { discarding = true })
             Spacer(Modifier.width(8.dp))
-            CtrlSquareButton(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), onClick = { send() })
+            CtrlSquareButton(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), onClick = { send(at = null) })
             Spacer(Modifier.width(4.dp))
         }
         Column(
@@ -579,6 +596,13 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             if (account?.unencrypted == true) {
                 Text(stringResource(R.string.compose_unencrypted), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Muted)
             }
+            CtrlSecondaryButton(
+                stringResource(R.string.send_later),
+                onClick = { scheduling = true },
+                icon = Icons.Outlined.Schedule,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(stringResource(R.string.send_later_note), style = MaterialTheme.typography.bodySmall, color = CtrlColors.Muted)
             Spacer(Modifier.heightIn(min = 24.dp))
         }
     }
@@ -600,6 +624,13 @@ private fun ComposeForm(draftId: String, start: Start, loadProblem: String?) {
             body = swapSignature(body, before, after)
             accountId = id
             fromEmail = email.takeIf { next != null && !it.equals(next.email, ignoreCase = true) }
+        }
+    }
+
+    if (scheduling) {
+        WhenPicker(stringResource(R.string.send_later), onDismiss = { scheduling = false }) { time ->
+            scheduling = false
+            send(at = time)
         }
     }
 
