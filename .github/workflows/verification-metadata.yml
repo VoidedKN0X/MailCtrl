@@ -33,6 +33,14 @@ jobs:
         with:
           cache-disabled: true
 
+      - name: Start from the configuration only
+        # Drop the old checksum entries first, so Gradle writes only what the build uses now and
+        # entries for versions that are no longer used don't pile up in the file.
+        run: |
+          if [ -f gradle/verification-metadata.xml ]; then
+            python3 -I -c 'import pathlib, re; p = pathlib.Path("gradle/verification-metadata.xml"); p.write_text(re.sub(r"\s*<components>.*?</components>", "", p.read_text(), flags=re.S))'
+          fi
+
       - name: Write verification metadata
         run: |
           # The build refuses to configure a release on CI without a signing key, so sign this throwaway
@@ -49,6 +57,7 @@ jobs:
 
       - name: Print the file
         run: |
+          sha256sum gradle/verification-metadata.xml
           echo "----- BEGIN verification-metadata.xml.gz.b64 -----"
           gzip -9c gradle/verification-metadata.xml | base64 -w 0
           echo
