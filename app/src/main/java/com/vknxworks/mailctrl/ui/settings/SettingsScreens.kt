@@ -482,6 +482,8 @@ fun SettingsScreen() {
                     icon = Icons.Outlined.Notifications,
                 ) { v -> update { it.copy(notificationContent = v) } }
             }
+
+            BackupGroup()
         }
     }
 

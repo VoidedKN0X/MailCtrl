@@ -641,4 +641,27 @@
     <string name="idle_state_retrying">No connection right now; trying again by itself</string>
     <string name="idle_state_stopped">Not running. Open MailCtrl or set Battery to Unrestricted so Android lets it start.</string>
     <string name="notify_summary_idle">open connection</string>
+    <!-- Back up and restore -->
+    <string name="backup_title">Back up and restore</string>
+    <string name="backup_footer">The file holds MailCtrl\'s settings and your accounts\' addresses, names, signatures, identities and server addresses. It never holds passwords, trusted certificates, OpenPGP keys, the app lock, mail or drafts. Restoring leaves everything under Privacy and security as it is on this phone.</string>
+    <string name="backup_save">Save settings to a file</string>
+    <string name="backup_save_sub">Pick where to keep it</string>
+    <string name="backup_restore">Restore settings from a file</string>
+    <string name="backup_restore_sub">Shows what will be replaced first</string>
+    <string name="backup_saved">Settings saved</string>
+    <string name="backup_save_failed">Couldn\'t save the settings file</string>
+    <string name="backup_not_valid">That isn\'t a MailCtrl settings file</string>
+    <string name="backup_too_new">That file is from a newer MailCtrl. Update MailCtrl first.</string>
+    <string name="backup_restore_title">Restore these settings?</string>
+    <string name="backup_restore_body">Saved on %1$s.\n\nThe settings in the file replace the ones on this phone.\n\nAccounts added (each asks for its password before it\'s used):\n%2$s\n\nAccounts already here whose names, signature, identities and switches are replaced (server, password and certificates stay):\n%3$s</string>
+    <string name="backup_restore_pictures">The file sets pictures from the internet to always load, for all mail.</string>
+    <string name="backup_none">none</string>
+    <string name="backup_restore_confirm">Restore</string>
+    <string name="backup_restored">Settings restored</string>
+    <string name="backup_restored_passwords">Settings restored. Open each added account and type its password.</string>
+    <string name="backup_restore_failed">Couldn\'t restore the settings</string>
+    <string name="backup_unencrypted_title">Connections without encryption</string>
+    <string name="backup_unencrypted_body">The file adds accounts whose connection to the mail server has no encryption. Only do this for a server on your own network or behind a VPN:\n\n%1$s</string>
+    <string name="backup_unencrypted_confirm">Add them</string>
+    <string name="backup_declined">Nothing was restored</string>
 </resources>

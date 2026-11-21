@@ -34,6 +34,7 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 - **Proton Mail** through hydroxide or Proton Mail Bridge on your own server (see [Proton Mail](#proton-mail))
 - **Self-signed certificates** you choose to trust, matched by their exact fingerprint
 - **mailto: links** and **Share to MailCtrl** from any app
+- **Back up and restore** your settings and account details (never passwords) to a file
 - **App lock** with its own PIN and optional fingerprint unlock (see [App lock](#app-lock))
 - **Hide in screenshots** and **Hide in recent apps**, two separate switches, on their own or with the app lock
 - The **Ctrl / Signal** look shared by every Ctrl app: high-contrast **dark and light** modes that follow your phone's setting
@@ -165,6 +166,15 @@ A wake-up carries no mail at all: MailCtrl ignores what's in it and checks your 
 **Notification content** (under Settings) chooses what notifications show: sender and subject, the sender only, or just "New mail". Until you pick one yourself, notifications show the sender and subject, or just "New mail" while the [app lock](#app-lock) is on, so a locked MailCtrl doesn't show your mail in the notification shade. Once you pick one, your choice is used whether the app lock is on or off. The lock screen only shows "New mail" unless Android is set to show everything there.
 
 Tapping a notification opens that message. Other apps can't use this to open a message: only MailCtrl's own notifications can, and anything else just opens the inbox.
+
+## Back up and restore
+
+Settings › **Back up and restore** writes a small file to a place you pick, and reads one back.
+
+- **In the file:** MailCtrl's settings, and for each account its address, names, signature, identities, colour, switches and server addresses.
+- **Never in the file:** passwords, trusted certificates, OpenPGP keys, the app lock and its PIN, the ntfy push address, mail, drafts, or the lists kept encrypted on the phone (addresses you've mailed, picture senders, snoozed and scheduled messages).
+- **Restoring asks first** and shows which accounts are added and which are changed. An added account arrives without a password and without trusted certificates: open it and sign in, and MailCtrl checks the servers as for any new account. An account that's already on the phone keeps its server settings, password and certificates. Accounts with an unencrypted connection need a second yes.
+- **Left as they are on the phone:** everything under Privacy and security (app lock, hiding, notification content), how long passphrases are remembered, subject encryption, ntfy and the open connection.
 
 ## App lock
 
