@@ -664,4 +664,5 @@
     <string name="backup_unencrypted_body">The file adds accounts whose connection to the mail server has no encryption. Only do this for a server on your own network or behind a VPN:\n\n%1$s</string>
     <string name="backup_unencrypted_confirm">Add them</string>
     <string name="backup_declined">Nothing was restored</string>
+    <string name="about_badges">Google-free · Telemetry-free · ARM64</string>
 </resources>

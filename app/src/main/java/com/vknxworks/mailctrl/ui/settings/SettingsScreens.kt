@@ -242,7 +242,7 @@ fun YouScreen() {
                 textAlign = TextAlign.Center,
             )
             Text(
-                "GOOGLE-FREE · TELEMETRY-FREE · ARM64",
+                stringResource(R.string.about_badges).uppercase(),
                 style = CtrlType.Label,
                 color = CtrlColors.Muted,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),

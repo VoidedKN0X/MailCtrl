@@ -38,6 +38,7 @@ Part of the [Ctrl series](#the-ctrl-series) by VKNXWorks.
 - **App lock** with its own PIN and optional fingerprint unlock (see [App lock](#app-lock))
 - **Hide in screenshots** and **Hide in recent apps**, two separate switches, on their own or with the app lock
 - The **Ctrl / Signal** look shared by every Ctrl app: high-contrast **dark and light** modes that follow your phone's setting
+- **English and Dutch**, following your phone's language
 
 ## Screenshots
 
