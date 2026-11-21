@@ -626,4 +626,5 @@
     <string name="snoozed_title">Snoozed</string>
     <string name="snoozed_footer">Hidden from the lists on this phone until then. Nothing changes on the mail server, so other mail apps keep showing them.</string>
     <string name="snoozed_until">Until %1$s</string>
+    <string name="later_interrupted">Android stopped MailCtrl while this was being sent. Check your Sent folder before you send it again.</string>
 </resources>

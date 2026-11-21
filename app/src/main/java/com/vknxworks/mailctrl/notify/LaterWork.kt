@@ -74,6 +74,11 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             null
         } ?: return Result.success()
         val (item, raw) = claimed
+        // A message that failed before waits for "Send now" (which clears the note); it never goes out by itself.
+        if (item.error != null) {
+            runCatching { c.outbox.finish(id, sent = false, error = item.error) }
+            return Result.success()
+        }
         val account = c.accounts.get(item.accountId)
         var sent = false
         var error: String? = null
@@ -91,8 +96,10 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 }
             }
         } catch (e: CancellationException) {
-            // Stopped by Android before it went out: it stays listed as it was, and can be sent or cancelled again.
-            withContext(NonCancellable) { runCatching { c.outbox.finish(id, sent = false, error = item.error) } }
+            // Stopped by Android while it was being sent: it may or may not have gone out, so it is not tried again
+            // by itself. It stays listed with that note until you send it again or cancel it.
+            val note = if (raw != null && account != null) applicationContext.getString(R.string.later_interrupted) else item.error
+            withContext(NonCancellable) { runCatching { c.outbox.finish(id, sent = false, error = note) } }
             throw e
         } catch (e: LockedException) {
             error = applicationContext.getString(R.string.later_locked)
