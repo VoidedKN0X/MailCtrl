@@ -70,8 +70,10 @@ fun LaterScreen() {
     val snoozed by c.snoozes.items.collectAsStateWithLifecycle()
     val accounts by c.accounts.accounts.collectAsStateWithLifecycle()
     var cancelling by remember { mutableStateOf<OutboxItem?>(null) }
-    // Messages held for the Undo seconds have their own bar; they only show here when something went wrong.
-    val scheduled = waiting.filter { !it.undo || it.error != null }
+    // Messages held for the Undo seconds have their own bar; they only show here once that time has passed and
+    // they still haven't gone out (no connection yet, or something went wrong).
+    val now = System.currentTimeMillis()
+    val scheduled = waiting.filter { !it.undo || it.error != null || it.sendAt <= now }
     val gone = stringResource(R.string.later_already_sent)
 
     Column(Modifier.fillMaxSize()) {
@@ -96,7 +98,8 @@ fun LaterScreen() {
                             item.draft.subject.ifBlank { stringResource(R.string.no_subject) },
                             listOfNotNull(
                                 stringResource(R.string.to_line, to.ifBlank { "—" }),
-                                item.error ?: stringResource(R.string.later_at, shortWhen(context, item.sendAt)),
+                                item.error
+                                    ?: if (item.sendAt <= now) stringResource(R.string.later_waiting) else stringResource(R.string.later_at, shortWhen(context, item.sendAt)),
                                 account?.takeIf { accounts.size > 1 },
                             ).joinToString("\n"),
                             icon = Icons.Outlined.Schedule,

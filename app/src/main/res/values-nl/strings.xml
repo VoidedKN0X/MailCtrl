@@ -648,4 +648,5 @@
     <string name="backup_unencrypted_confirm">Toevoegen</string>
     <string name="backup_declined">Er is niets hersteld</string>
     <string name="about_badges">Google-vrij · Geen telemetrie · ARM64</string>
+    <string name="later_waiting">Wacht op een verbinding; het vertrekt zodra de telefoon online is</string>
 </resources>

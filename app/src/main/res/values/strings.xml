@@ -665,4 +665,5 @@
     <string name="backup_unencrypted_confirm">Add them</string>
     <string name="backup_declined">Nothing was restored</string>
     <string name="about_badges">Google-free · Telemetry-free · ARM64</string>
+    <string name="later_waiting">Waiting for a connection; it goes out as soon as the phone is online</string>
 </resources>

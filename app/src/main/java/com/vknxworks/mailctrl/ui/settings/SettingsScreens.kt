@@ -201,7 +201,7 @@ fun YouScreen() {
                 )
                 GroupRow(
                     stringResource(R.string.later_title),
-                    stringResource(R.string.later_subtitle, waiting.count { !it.undo }, snoozed.size),
+                    stringResource(R.string.later_subtitle, waiting.count { !it.undo || it.error != null || it.sendAt <= System.currentTimeMillis() }, snoozed.size),
                     icon = Icons.Outlined.Schedule,
                     showChevron = true,
                     onClick = { nav.navigate(LaterRoute) },
