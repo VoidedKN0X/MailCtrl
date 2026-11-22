@@ -21,7 +21,6 @@ import com.vknxworks.mailctrl.container
 import com.vknxworks.mailctrl.data.settings.AccountRestore
 import com.vknxworks.mailctrl.data.settings.BackupFile
 import com.vknxworks.mailctrl.data.settings.BackupFormatException
-import com.vknxworks.mailctrl.data.settings.RemoteContent
 import com.vknxworks.mailctrl.data.settings.SettingsBackups
 import com.vknxworks.mailctrl.ui.components.ConfirmDialog
 import com.vknxworks.mailctrl.ui.components.Group
@@ -141,10 +140,9 @@ fun BackupGroup() {
         val none = stringResource(R.string.backup_none)
         val added = p.accounts.added.joinToString("\n") { it.email }.ifEmpty { none }
         val updated = p.accounts.updated.joinToString("\n") { it.email }.ifEmpty { none }
-        val pictures = if (p.file.settings.remoteContent == RemoteContent.ALWAYS.name) "\n\n" + stringResource(R.string.backup_restore_pictures) else ""
         ConfirmDialog(
             stringResource(R.string.backup_restore_title),
-            stringResource(R.string.backup_restore_body, p.file.createdAt.take(10).ifEmpty { "?" }, added, updated) + pictures,
+            stringResource(R.string.backup_restore_body, p.file.createdAt.take(10).ifEmpty { "?" }, added, updated),
             stringResource(R.string.backup_restore_confirm),
             onDismiss = { pending = null },
         ) {

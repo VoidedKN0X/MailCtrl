@@ -33,6 +33,7 @@ data class BackupFile(
  * The settings that travel. Every one is optional, so a file from another version restores what it has. Left
  * out on purpose: everything under Privacy and security (app lock, hiding, notification content), how long an
  * OpenPGP passphrase is remembered, subject encryption, the ntfy registration and the open connection.
+ * Remote content and WKD lookups travel, but restoring can only make them stricter (see [SettingsBackups.settings]).
  */
 @Serializable
 data class BackupSettings(
@@ -160,7 +161,8 @@ object SettingsBackups {
         return current.copy(
             notifyEnabled = b.notifyEnabled ?: current.notifyEnabled,
             notifyInterval = b.notifyInterval?.takeIf { it in ALLOWED_INTERVALS } ?: current.notifyInterval,
-            remoteContent = enumOr(b.remoteContent, current.remoteContent),
+            // Privacy: a file can make these stricter (pictures blocked, no WKD lookups) but never looser.
+            remoteContent = enumOr(b.remoteContent, current.remoteContent).let { if (it.ordinal <= current.remoteContent.ordinal) it else current.remoteContent },
             markReadOnOpen = b.markReadOnOpen ?: current.markReadOnOpen,
             keepMessages = b.keepMessages ?: current.keepMessages,
             unifiedInbox = b.unifiedInbox ?: current.unifiedInbox,
@@ -168,7 +170,7 @@ object SettingsBackups {
             swipeLeft = enumOr(b.swipeLeft, current.swipeLeft),
             confirmDelete = b.confirmDelete ?: current.confirmDelete,
             defaultAccount = b.defaultAccount?.let { email -> accounts.firstOrNull { it.email.equals(email, ignoreCase = true) }?.id } ?: current.defaultAccount,
-            wkdLookup = b.wkdLookup ?: current.wkdLookup,
+            wkdLookup = current.wkdLookup && (b.wkdLookup ?: true),
             darkMessages = b.darkMessages ?: current.darkMessages,
             suggestRecipients = b.suggestRecipients ?: current.suggestRecipients,
             conversations = b.conversations ?: current.conversations,

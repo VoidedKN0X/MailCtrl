@@ -166,6 +166,13 @@ class AppContainer(val context: Context) {
         if (pgpService.isInitialized()) pgp.forget()
         // Messages kept in memory to open quickly are forgotten while locked.
         mail.forgetBodies()
+        // And attachment files written to open or save (decrypted ones too), apart from the last few minutes'.
+        appScope.launch(Dispatchers.IO) {
+            com.vknxworks.mailctrl.mail.AttachmentCache.prune(
+                com.vknxworks.mailctrl.mail.AttachmentCache.root(context.cacheDir),
+                System.currentTimeMillis(),
+            )
+        }
         if (accounts.anySealed()) mail.closeAll()
     }
 

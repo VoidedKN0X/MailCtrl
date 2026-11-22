@@ -146,6 +146,8 @@
     <string name="lock_fingerprint_unavailable">Configurez d\'abord une empreinte sur ce téléphone</string>
     <string name="lock_forgot">Code PIN oublié ?</string>
     <string name="lock_forgot_body">Le code PIN ne peut pas être récupéré. Confirmez votre identité avec le verrouillage de l\'écran de votre téléphone pour désactiver le verrouillage de l\'appli. Les brouillons chiffrés avec l\'ancien code PIN sont supprimés, et les comptes dont le mot de passe était scellé avec lui redemandent leur mot de passe. Vos e-mails restent sur vos serveurs.</string>
+    <string name="lock_forgot_screen_lock">Le verrouillage d\'écran de votre téléphone vous sera d\'abord demandé, pour que vous seul puissiez le réinitialiser.</string>
+    <string name="lock_reset_prompt_failed">Impossible d\'afficher le verrouillage d\'écran</string>
     <string name="lock_forgot_confirm">Confirmer et réinitialiser</string>
     <string name="lock_forgot_no_screen_lock">Le code PIN ne peut pas être récupéré, et ce téléphone n\'a pas de verrouillage de l\'écran pour confirmer votre identité. Pour recommencer, effacez le stockage de MailCtrl dans les paramètres Android et ajoutez à nouveau vos comptes (vos e-mails restent sur vos serveurs).</string>
     <string name="lock_forgot_title">Code PIN oublié ?</string>
@@ -625,7 +627,7 @@
     <string name="idle_state_stopped">Inactif. Ouvrez MailCtrl ou réglez Batterie sur Sans restriction pour qu\'Android le laisse démarrer.</string>
     <string name="notify_summary_idle">connexion ouverte</string>
     <string name="backup_title">Sauvegarder et restaurer</string>
-    <string name="backup_footer">Le fichier contient les paramètres de MailCtrl et les adresses, noms, signatures, identités et adresses de serveur de vos comptes. Il ne contient jamais de mots de passe, certificats approuvés, clés OpenPGP, verrouillage de l\'appli, e-mails ni brouillons. La restauration laisse tout ce qui est sous Confidentialité et sécurité tel quel sur ce téléphone.</string>
+    <string name="backup_footer">Le fichier contient les paramètres de MailCtrl et les adresses, noms, signatures, identités et adresses de serveur de vos comptes. Il ne contient jamais de mots de passe, certificats approuvés, clés OpenPGP, verrouillage de l\'appli, e-mails ni brouillons. La restauration laisse tout ce qui est sous Confidentialité et sécurité tel quel sur ce téléphone, et ne peut que rendre les images d\'Internet et la recherche de clés (WKD) plus strictes, jamais plus permissives.</string>
     <string name="backup_save">Enregistrer les paramètres dans un fichier</string>
     <string name="backup_save_sub">Choisissez où le garder</string>
     <string name="backup_restore">Restaurer les paramètres depuis un fichier</string>
@@ -636,7 +638,6 @@
     <string name="backup_too_new">Ce fichier vient d\'une version plus récente de MailCtrl. Mettez d\'abord MailCtrl à jour.</string>
     <string name="backup_restore_title">Restaurer ces paramètres ?</string>
     <string name="backup_restore_body">Enregistré le %1$s.\n\nLes paramètres du fichier remplacent ceux de ce téléphone.\n\nComptes ajoutés (chacun demande son mot de passe avant d\'être utilisé) :\n%2$s\n\nComptes déjà présents dont les noms, la signature, les identités et les options sont remplacés (serveur, mot de passe et certificats restent) :\n%3$s</string>
-    <string name="backup_restore_pictures">Le fichier règle les images d\'Internet sur toujours charger, pour tous les e-mails.</string>
     <string name="backup_none">aucun</string>
     <string name="backup_restore_confirm">Restaurer</string>
     <string name="backup_restored">Paramètres restaurés</string>

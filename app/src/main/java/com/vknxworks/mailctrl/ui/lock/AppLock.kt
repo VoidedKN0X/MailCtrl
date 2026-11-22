@@ -258,14 +258,14 @@ object AppLock {
 
     fun screenLockAvailable(context: Context): Boolean = runCatching {
         context.getSystemService(BiometricManager::class.java)?.canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL,
         ) == BiometricManager.BIOMETRIC_SUCCESS
     }.getOrDefault(false)
 
     /**
-     * The phone's own screen lock (or fingerprint). Only used for "Forgot PIN?", to prove it's the phone's
-     * owner before the app lock is reset: texts aren't encrypted with the PIN, so resetting it must not be
-     * open to anyone who picks the phone up.
+     * The phone's own screen lock (or a strong fingerprint). Only used for "Forgot PIN?", to prove it's the phone's
+     * owner before the app lock is reset, so resetting it is not open to anyone who picks the phone up.
+     * [onResult] gets null when confirmed, an empty string when cancelled, or an error message.
      */
     fun screenLockAuthenticate(activity: Activity, onResult: (String?) -> Unit) {
         // Replaces a prompt that is still marked as open; its late answer (if any) is ignored.
@@ -275,7 +275,7 @@ object AppLock {
                 .setTitle(activity.getString(R.string.lock_reset_prompt_title))
                 .setSubtitle(activity.getString(R.string.lock_reset_prompt_subtitle))
                 .setAllowedAuthenticators(
-                    BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL,
                 )
                 .build()
             prompt.authenticate(signal, activity.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
@@ -285,7 +285,11 @@ object AppLock {
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    if (finish()) onResult(errString.toString())
+                    if (!finish()) return
+                    // Cancelled: just back to the lock screen, without an error message.
+                    val cancelled = errorCode == BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED ||
+                        errorCode == BiometricPrompt.BIOMETRIC_ERROR_CANCELED
+                    onResult(if (cancelled) "" else errString.toString())
                 }
             })
         } catch (e: Exception) {
@@ -507,7 +511,7 @@ private fun PinLockScreen() {
             if (!canReset || a.isFinishing || a.isDestroyed) return@ConfirmDialog
             // Only the phone's owner may reset it: confirm with the phone's own screen lock first.
             AppLock.screenLockAuthenticate(a) { error ->
-                if (error == null) scope.launch { c.resetLock() } else message = error
+                if (error == null) scope.launch { c.resetLock() } else if (error.isNotEmpty()) message = error
             }
         }
     }

@@ -4,6 +4,19 @@ What changed in each MailCtrl release. Every release on the [Releases page](http
 
 To publish a new version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a section here, and push to `main`. Pushes without a version bump only build; they don't make a release.
 
+## Unreleased
+
+Built and checked by CI only: nothing here has been run on a phone yet.
+
+### Changed
+
+- **Restoring a settings file can no longer make privacy looser.** **Pictures from the internet** and **Look up keys (WKD)** were taken from the file whichever way they went, so restoring an old file could set pictures to always load (senders then see when and where you open their mail) or turn key lookups back on. Now a file can only make them stricter: it can block pictures or turn lookups off, but never the other way round. If you want them on, set them by hand after restoring. The warning "The file sets pictures from the internet to always load" is gone, because that can't happen any more.
+
+### Security
+
+- **Opened attachments are cleaned up when the app locks.** To open, share or save an attachment, MailCtrl writes it to a file in its own cache, and for an OpenPGP or S/MIME encrypted message that file is the decrypted attachment. Those files were only removed the next time MailCtrl started, and with "Instant with an open connection" on MailCtrl can keep running for days, so a decrypted attachment could stay on the phone unencrypted that long. Now every attachment file older than 5 minutes is deleted as soon as the app lock locks (and all of them at start, as before). The 5 minutes give the app you just opened it in time to read it; an attachment opened in another app earlier than that can't be read again by that app after the lock: open it again from MailCtrl.
+- **"Forgot PIN?" only accepts a strong fingerprint or your screen lock.** The confirmation before resetting the app lock already asked for your phone's own screen lock; it no longer accepts weak face unlock (which a photo can fool), only your phone's PIN, pattern, password or a strong fingerprint. Cancelling the prompt now just takes you back to the lock screen without an error message.
+
 ## v0.7.0 (2026-11-21)
 
 Built and checked by CI only: nothing in this release had been run on a phone when it was published.

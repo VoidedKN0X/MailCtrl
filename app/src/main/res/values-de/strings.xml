@@ -146,6 +146,8 @@
     <string name="lock_fingerprint_unavailable">Richte zuerst einen Fingerabdruck auf diesem Telefon ein</string>
     <string name="lock_forgot">PIN vergessen?</string>
     <string name="lock_forgot_body">Die PIN lässt sich nicht wiederherstellen. Bestätige mit der Displaysperre deines Telefons, dass du es bist, um die App-Sperre auszuschalten. Mit der alten PIN verschlüsselte Entwürfe werden gelöscht, und Konten, deren Passwort damit versiegelt war, fragen erneut nach ihrem Passwort. Deine E-Mails bleiben auf deinen Servern.</string>
+    <string name="lock_forgot_screen_lock">Zuerst wird die Displaysperre deines Smartphones abgefragt, damit nur du zurücksetzen kannst.</string>
+    <string name="lock_reset_prompt_failed">Displaysperre konnte nicht angezeigt werden</string>
     <string name="lock_forgot_confirm">Bestätigen und zurücksetzen</string>
     <string name="lock_forgot_no_screen_lock">Die PIN lässt sich nicht wiederherstellen, und dieses Telefon hat keine Displaysperre, um zu bestätigen, dass du es bist. Um neu anzufangen, lösche den Speicher von MailCtrl in den Android-Einstellungen und füge deine Konten erneut hinzu (deine E-Mails bleiben auf deinen Servern).</string>
     <string name="lock_forgot_title">PIN vergessen?</string>
@@ -625,7 +627,7 @@
     <string name="idle_state_stopped">Läuft nicht. Öffne MailCtrl oder stelle Akku auf Uneingeschränkt, damit Android es starten lässt.</string>
     <string name="notify_summary_idle">offene Verbindung</string>
     <string name="backup_title">Sichern und wiederherstellen</string>
-    <string name="backup_footer">Die Datei enthält die Einstellungen von MailCtrl und die Adressen, Namen, Signaturen, Identitäten und Serveradressen deiner Konten. Sie enthält nie Passwörter, vertraute Zertifikate, OpenPGP-Schlüssel, die App-Sperre, E-Mails oder Entwürfe. Beim Wiederherstellen bleibt alles unter „Datenschutz und Sicherheit“ auf diesem Telefon, wie es ist.</string>
+    <string name="backup_footer">Die Datei enthält die Einstellungen von MailCtrl und die Adressen, Namen, Signaturen, Identitäten und Serveradressen deiner Konten. Sie enthält nie Passwörter, vertraute Zertifikate, OpenPGP-Schlüssel, die App-Sperre, E-Mails oder Entwürfe. Beim Wiederherstellen bleibt alles unter „Datenschutz und Sicherheit“ auf diesem Telefon, wie es ist, und Bilder aus dem Internet und das Nachschlagen von Schlüsseln (WKD) können nur strenger werden, nie lockerer.</string>
     <string name="backup_save">Einstellungen in einer Datei speichern</string>
     <string name="backup_save_sub">Wähle, wo sie gespeichert wird</string>
     <string name="backup_restore">Einstellungen aus einer Datei wiederherstellen</string>
@@ -636,7 +638,6 @@
     <string name="backup_too_new">Diese Datei stammt von einem neueren MailCtrl. Aktualisiere zuerst MailCtrl.</string>
     <string name="backup_restore_title">Diese Einstellungen wiederherstellen?</string>
     <string name="backup_restore_body">Gespeichert am %1$s.\n\nDie Einstellungen in der Datei ersetzen die auf diesem Telefon.\n\nHinzugefügte Konten (jedes fragt vor der Nutzung nach seinem Passwort):\n%2$s\n\nVorhandene Konten, deren Namen, Signatur, Identitäten und Schalter ersetzt werden (Server, Passwort und Zertifikate bleiben):\n%3$s</string>
-    <string name="backup_restore_pictures">Die Datei stellt Bilder aus dem Internet für alle E-Mails auf immer laden.</string>
     <string name="backup_none">keine</string>
     <string name="backup_restore_confirm">Wiederherstellen</string>
     <string name="backup_restored">Einstellungen wiederhergestellt</string>

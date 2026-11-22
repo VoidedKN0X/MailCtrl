@@ -147,6 +147,8 @@
     <string name="lock_fingerprint_unavailable">Stel eerst een vingerafdruk in op deze telefoon</string>
     <string name="lock_forgot">Pincode vergeten?</string>
     <string name="lock_forgot_body">De pincode kan niet teruggehaald worden. Bevestig met de schermvergrendeling van je telefoon dat jij het bent om de app-vergrendeling uit te zetten. Concepten die met de oude pincode versleuteld zijn, worden verwijderd, en accounts waarvan het wachtwoord ermee verzegeld was, vragen hun wachtwoord opnieuw. Je mail blijft op je servers staan.</string>
+    <string name="lock_forgot_screen_lock">Eerst vraagt je telefoon zijn schermvergrendeling, zodat alleen jij dit kunt resetten.</string>
+    <string name="lock_reset_prompt_failed">De schermvergrendeling kon niet getoond worden</string>
     <string name="lock_forgot_confirm">Bevestigen en resetten</string>
     <string name="lock_forgot_no_screen_lock">De pincode kan niet teruggehaald worden, en deze telefoon heeft geen schermvergrendeling om te bevestigen dat jij het bent. Om opnieuw te beginnen wis je de opslag van MailCtrl in de instellingen van Android en voeg je je accounts opnieuw toe (je mail blijft op je servers staan).</string>
     <string name="lock_forgot_title">Je pincode vergeten?</string>
@@ -626,7 +628,7 @@
     <string name="idle_state_stopped">Loopt niet. Open MailCtrl of zet Batterij op Onbeperkt zodat Android het laat starten.</string>
     <string name="notify_summary_idle">open verbinding</string>
     <string name="backup_title">Back-up en herstel</string>
-    <string name="backup_footer">Het bestand bevat de instellingen van MailCtrl en van je accounts de adressen, namen, handtekeningen, identiteiten en serveradressen. Het bevat nooit wachtwoorden, vertrouwde certificaten, OpenPGP-sleutels, de app-vergrendeling, mail of concepten. Bij het herstellen blijft alles onder Privacy en beveiliging zoals het op deze telefoon is.</string>
+    <string name="backup_footer">Het bestand bevat de instellingen van MailCtrl en van je accounts de adressen, namen, handtekeningen, identiteiten en serveradressen. Het bevat nooit wachtwoorden, vertrouwde certificaten, OpenPGP-sleutels, de app-vergrendeling, mail of concepten. Bij het herstellen blijft alles onder Privacy en beveiliging zoals het op deze telefoon is, en kunnen afbeeldingen van het internet en sleutels opzoeken (WKD) alleen strenger worden, nooit losser.</string>
     <string name="backup_save">Instellingen in een bestand opslaan</string>
     <string name="backup_save_sub">Kies waar je het bewaart</string>
     <string name="backup_restore">Instellingen uit een bestand herstellen</string>
@@ -637,7 +639,6 @@
     <string name="backup_too_new">Dat bestand komt van een nieuwere MailCtrl. Werk MailCtrl eerst bij.</string>
     <string name="backup_restore_title">Deze instellingen herstellen?</string>
     <string name="backup_restore_body">Bewaard op %1$s.\n\nDe instellingen in het bestand vervangen die op deze telefoon.\n\nAccounts die toegevoegd worden (elk vraagt zijn wachtwoord voor het gebruikt wordt):\n%2$s\n\nAccounts die er al zijn en waarvan namen, handtekening, identiteiten en schakelaars vervangen worden (server, wachtwoord en certificaten blijven):\n%3$s</string>
-    <string name="backup_restore_pictures">Het bestand zet afbeeldingen van het internet op altijd laden, voor alle mail.</string>
     <string name="backup_none">geen</string>
     <string name="backup_restore_confirm">Herstellen</string>
     <string name="backup_restored">Instellingen hersteld</string>

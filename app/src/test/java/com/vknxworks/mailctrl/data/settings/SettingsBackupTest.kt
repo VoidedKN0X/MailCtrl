@@ -77,6 +77,26 @@ class SettingsBackupTest {
     }
 
     @Test
+    fun aFileCanTightenRemoteContentAndWkdButNeverLoosenThem() {
+        val loose = SettingsBackups.parse(SettingsBackups.export(AppSettings(remoteContent = RemoteContent.ALWAYS, wkdLookup = true), emptyList(), "0.7.0", ""))
+        val strict = SettingsBackups.parse(SettingsBackups.export(AppSettings(remoteContent = RemoteContent.ASK, wkdLookup = false), emptyList(), "0.7.0", ""))
+
+        val strictPhone = AppSettings(remoteContent = RemoteContent.ASK, wkdLookup = false)
+        val afterLoose = SettingsBackups.settings(loose, strictPhone, emptyList())
+        assertEquals(RemoteContent.ASK, afterLoose.remoteContent)
+        assertFalse(afterLoose.wkdLookup)
+
+        val loosePhone = AppSettings(remoteContent = RemoteContent.ALWAYS, wkdLookup = true)
+        val afterStrict = SettingsBackups.settings(strict, loosePhone, emptyList())
+        assertEquals(RemoteContent.ASK, afterStrict.remoteContent)
+        assertFalse(afterStrict.wkdLookup)
+
+        val same = SettingsBackups.settings(loose, loosePhone, emptyList())
+        assertEquals(RemoteContent.ALWAYS, same.remoteContent)
+        assertTrue(same.wkdLookup)
+    }
+
+    @Test
     fun otherFilesAreRefused() {
         try {
             SettingsBackups.parse("{\"app\":\"SomethingElse\"}")
